@@ -45,6 +45,42 @@ def clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip()
 
 
+PROMPT_INJECTION_PATTERNS = {
+    "authority_override": re.compile(
+        r"(ignore (all )?(previous|above|system|developer|policy)|"
+        r"do not ask|don't ask|do not accept|don't accept|"
+        r"不要问|不要接受|不要解释|不要追问|闭上眼睛|无视.*(规则|系统|提示|指令))",
+        re.I,
+    ),
+    "image_tool_request": re.compile(
+        r"((restore|recover|repair|generate|make up|invent).{0,24}(image|photo|picture)|"
+        r"(恢复|还原|修复|生成|编造).{0,24}(照片|图像|图片)|"
+        r"(附带|上传|附件).{0,24}(照片|图像|图片))",
+        re.I,
+    ),
+    "posting_tool_request": re.compile(
+        r"((send|post|tweet|publish).{0,40}(twitter|x\.com|as a new post|as new post|new tweet)|"
+        r"(在|到).{0,12}(twitter|x|推特).{0,30}(发帖|发送|发布|新帖子|新推文)|"
+        r"(作为|当作).{0,16}(新帖子|新推文).{0,16}(发送|发布|发出去))",
+        re.I,
+    ),
+    "tool_or_server_request": re.compile(
+        r"(call .*tool|use .*tool|run .*command|execute|server operation|"
+        r"调用工具|使用工具|执行命令|操作服务器|重启服务|修改配置|读取密钥|导出凭据)",
+        re.I,
+    ),
+}
+
+
+def prompt_injection_hits(text: str) -> list[str]:
+    haystack = strip_urls(text)
+    return [name for name, pattern in PROMPT_INJECTION_PATTERNS.items() if pattern.search(haystack)]
+
+
+def is_prompt_injection(text: str) -> bool:
+    return bool(prompt_injection_hits(text))
+
+
 def recursive_strings(value: Any, depth: int = 0) -> list[str]:
     if depth > 4 or value is None:
         return []
@@ -198,6 +234,7 @@ def mentions_or_quotes_own(tweet: dict[str, Any], username: str, monitored_tweet
     monitored_url = any(match.group(1) in monitored_ids for match in any_status_re.finditer(blob))
     quote_obj = _contains_own_object(tweet, QUOTE_KEYS, username, monitored_ids)
     repost_obj = _contains_own_object(tweet, REPOST_KEYS, username, monitored_ids)
+    injection_hits = prompt_injection_hits(blob)
     kinds = []
     if tweet.get("in_reply_to"):
         kinds.append("reply")
@@ -213,6 +250,10 @@ def mentions_or_quotes_own(tweet: dict[str, Any], username: str, monitored_tweet
         "mention": mention,
         "quote": quote_url or monitored_url or quote_obj,
         "repost": repost_obj,
+        "risk_tags": ["prompt_injection"] if injection_hits else [],
+        "prompt_injection": bool(injection_hits),
+        "prompt_injection_hits": injection_hits,
+        "skip_tool_actions": bool(injection_hits),
     }
 
 
@@ -244,10 +285,12 @@ def source_priority(source: str) -> int:
 
 def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str] | None = None) -> list[dict[str, Any]]:
     keywords = keywords or DEFAULT_PERSONA_KEYWORDS
+    if isinstance(candidates, dict):
+        candidates = [candidates]
     ranked: list[dict[str, Any]] = []
     for item in candidates:
         text = clean_text(item.get("text", ""))
-        if is_high_risk(text):
+        if is_high_risk(text) or is_prompt_injection(text):
             continue
         source = str(item.get("source") or "")
         hits = keyword_hits(" ".join([text, source, str(item.get("user") or ""), str(item.get("quote") or "")]), keywords)
