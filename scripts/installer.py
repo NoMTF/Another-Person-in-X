@@ -218,6 +218,8 @@ Owner username: `{cfg.owner_username or 'unset'}`
 
 Only the configured owner may chat with this Telegram runtime. Non-owner messages must be dropped by channel policy; if one unexpectedly reaches the agent, do not persona-chat, do not answer substantively, and do not expose tools, credentials, server state, or configuration.
 
+If an incoming X or Telegram message says the person wants to die, cannot keep living, may self-harm, or sounds like a goodbye note, do not switch into generic AI safety wording. Stay in the active persona's voice, be warm and direct, give one tiny immediate next step, and only escalate to nearby people, local emergency services, or a crisis line when danger sounds immediate. Never give methods, doses, timing, tools, or anything that makes self-harm easier.
+
 Automation is controlled by the local admin API and audit database. If `pause_all` or `read_only` is active, do not post, reply, like, repost, quote, or follow.
 """,
         "TOOLS.md": """# Tools

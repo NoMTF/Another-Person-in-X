@@ -34,6 +34,7 @@ Use this reference before generating or updating a persona skill.
    - `SKILL.md`
    - `voice.md`
    - `social.md`
+   - `crisis_support.md`
    - `memory.md`
    - `scripts/check_reply.py`
    - `scripts/ground.py`
@@ -61,3 +62,12 @@ Each generation samples a mood state:
 - long-form
 
 Variation changes length, rhythm, seriousness, and emotional temperature. It must not change the persona's core identity, safety boundary, or relationship map.
+
+## Crisis Voice Test
+
+Distilled personas need a separate crisis-support voice, because generic safety templates make the bot sound fake.
+
+- Add `crisis_support.md` to the emitted skill.
+- Treat "want to die", "不想活", "想死", goodbye notes, and hopelessness as crisis-support contexts, not ordinary blocked topics.
+- The reply should stay in persona voice, acknowledge the feeling, give one tiny next step, and avoid AI disclaimers or resource-list formatting.
+- High-immediacy danger may mention nearby people, local emergency services, or a crisis line, but still in natural language.

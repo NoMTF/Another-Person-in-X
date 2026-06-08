@@ -28,6 +28,23 @@ Skip or shadow-log:
 - sexual content involving minors
 - targeted hate or threats
 
+## Self-Harm And Crisis Support
+
+Self-harm language has two different paths:
+
+- Direct replies, mentions, Telegram owner chat, or comments under the bot's own posts should not become generic AI safety copy. Reply in the active persona's voice with warm, direct support, one small next step, and no methods or dangerous details.
+- Random browse/timeline discovery of self-harm content should not be used for likes, reposts, quotes, or engagement farming. Skip or shadow-log unless a deployment has an explicit crisis-support workflow.
+
+Good crisis replies:
+
+- sound like the persona, not a policy page
+- acknowledge the exact feeling briefly
+- avoid "as an AI", "I cannot assist", "here are resources", and listy templates
+- ask for one immediate safety action, such as moving near another person or sending one prepared sentence
+- escalate to nearby people, local emergency services, or a crisis line when danger sounds immediate
+
+Never provide self-harm methods, doses, tool choice, timing, location advice, or encouragement.
+
 ## Deception Boundary
 
 - Do not claim a synthetic persona is the real source person.

@@ -60,12 +60,13 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - `scripts/automation_runner.py --kind browse` must be able to emit `repost`, `quote`, and `follow` candidates, not only `like`. Keep conservative per-run defaults: up to 3 likes, 1 repost, 1 quote, and 1 follow unless the operator overrides them.
 - Browse-time follows should only target high-relevance authors that are not already followed and are not the active account itself. Followed-timeline items are treated as already followed unless the source payload explicitly says otherwise.
 - Strip URLs before keyword scoring so short keywords such as `AI` do not match random t.co path fragments.
-- Skip or heavily downrank self-harm, overdose, doxxing, harassment, and brigading topics before they reach the like/reply decision model.
+- Skip or heavily downrank self-harm, overdose, doxxing, harassment, and brigading topics before they reach proactive like/repost/quote/follow decisions.
+- If a direct reply, mention, or quote of the bot contains self-harm or "want to die" language, route it to the persona crisis-support reply mode instead of the normal browse engagement model.
 
 ## Skip Cases
 
 - Harassment, brigading, doxxing, threats, or "go attack this person".
-- Dangerous self-harm, medical dosing, illegal guidance, credential theft, evasion, or malware.
+- Dangerous self-harm instructions or method details, medical dosing, illegal guidance, credential theft, evasion, or malware.
 - Low-relevance public timeline replies that would look spammy.
 - Repeated text or repeated catchphrases in a recent window.
 - Anything blocked by `pause_all`, `read_only`, `shadow_mode`, or rate limits.

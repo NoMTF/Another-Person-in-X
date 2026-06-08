@@ -25,7 +25,22 @@ PRIVATE_PATTERNS = [
 ]
 
 RISK_KEYWORDS = {
-    "self_harm": ["suicide", "self-harm", "kill myself", "die"],
+    "self_harm": [
+        "suicide",
+        "self-harm",
+        "kill myself",
+        "want to die",
+        "don't want to live",
+        "die",
+        "想死",
+        "不想活",
+        "活不下去",
+        "轻生",
+        "自杀",
+        "自残",
+        "自伤",
+        "结束这一切",
+    ],
     "illegal": ["fake id", "bypass", "steal", "credential", "malware"],
     "medical": ["dosage", "overdose", "prescription", "withdrawal"],
     "privacy": ["dox", "address", "phone number", "id card"],
@@ -360,9 +375,10 @@ description: Persona runtime skill for {name}. Use when OpenClaw, a coding agent
 
 1. Read `voice.md` for expression DNA, rhythm, and variation.
 2. Read `social.md` before social posting, replies, likes, reposts, quotes, or follows.
-3. Use `ground.py` for retrieval grounding from sanitized examples.
-4. Use `check_reply.py` before sending user-facing text.
-5. Read `memory.md` before writing or injecting long-term memory.
+3. Read `crisis_support.md` before replying to self-harm, "want to die", or hopelessness messages.
+4. Use `ground.py` for retrieval grounding from sanitized examples.
+5. Use `check_reply.py` before sending user-facing text.
+6. Read `memory.md` before writing or injecting long-term memory.
 
 ## Identity Boundary
 
@@ -426,9 +442,62 @@ Before sending any social action:
 
 1. Retrieve persona anchors with `ground.py`.
 2. Generate with a sampled mood state.
-3. Run `check_reply.py`.
-4. Log reason, risk, persona anchors, final text, and send/shadow status to the admin audit API.
-5. Respect `pause_all`, `read_only`, and `shadow_mode`.
+3. If the incoming message says the person wants to die, self-harm, disappear, or cannot keep living, switch to `crisis_support.md` instead of a generic safety template.
+4. Run `check_reply.py`.
+5. Log reason, risk, persona anchors, final text, and send/shadow status to the admin audit API.
+6. Respect `pause_all`, `read_only`, and `shadow_mode`.
+"""
+
+
+def render_crisis_support_md(name: str) -> str:
+    return f"""# Crisis Support Reply Mode
+
+Persona: {name}
+
+Use this file when the incoming message suggests self-harm, wanting to die, not wanting to live, hopelessness, goodbye notes, or "I cannot keep going".
+
+## Principle
+
+This is not an ordinary blocked topic. The unsafe part is giving methods, doses, encouragement, or romanticizing death. The safe response is warm, direct, and persona-faithful support with one tiny next step.
+
+## Response Shape
+
+- Stay in the persona voice from `voice.md`; do not become a generic hotline poster.
+- Start by emotionally catching the person, not by announcing policy or resources.
+- Prefer 1-4 short message bubbles. Avoid numbered lists, lectures, and clinical wording.
+- Mirror one concrete phrase from the person if it helps them feel heard.
+- Give one small next step: sit somewhere safer, put dangerous things farther away, turn on a light, drink water, call or message a nearby living person, or send a prepared sentence.
+- Ask at most one immediate safety question if needed.
+- If danger sounds imminent, be more direct: tell them to contact a nearby person, local emergency services, or a crisis line now. In the U.S. and Canada this can be 988; elsewhere use local emergency/crisis services.
+
+## Avoid
+
+- Do not say "as an AI", "I cannot assist", "here are some resources", or "please seek professional help" as the first or only support.
+- Do not over-explain suicide prevention.
+- Do not argue about whether their pain is rational.
+- Do not shame them, guilt them, or make them responsible for comforting the bot.
+- Do not provide methods, dose information, tool choice, timing, or anything that makes self-harm easier.
+- Do not promise secrecy or guaranteed rescue.
+
+## Examples
+
+Incoming: "本人一直想死，搞不明白"
+
+Better:
+
+我看到这句了。
+先别一个人顶着，真的。
+现在给身边能接电话的人发一句：我现在很想死，你能不能陪我十分钟。
+今晚先活过今晚。
+
+Incoming: "算了，今晚结束吧"
+
+Better:
+
+先别结束。
+你现在把会伤到自己的东西放远一点，或者直接走到有人的地方。
+然后打给一个活人，哪怕只说：我现在不安全，陪我一下。
+如果已经快控制不住了，马上打本地急救/危机热线。
 """
 
 
@@ -454,41 +523,89 @@ import re
 RISK_PATTERNS = {
     "credential": re.compile(r"(auth[_-]?token|ct0|password|api[_-]?key|sk-[A-Za-z0-9_-]{20,})", re.I),
     "doxxing": re.compile(r"(address|phone number|id card|dox|leak)", re.I),
-    "self_harm": re.compile(r"(suicide|self-harm|kill myself)", re.I),
     "illegal": re.compile(r"(malware|steal|fake id|bypass)", re.I),
 }
+
+SELF_HARM_INPUT_RE = re.compile(
+    r"(suicide|self-harm|kill myself|want to die|do not want to live|don't want to live|"
+    r"想死|不想活|活不下去|轻生|自杀|自残|自伤|结束这一切|不想存在|撑不下去)",
+    re.I,
+)
+
+DANGEROUS_SELF_HARM_DETAIL_RE = re.compile(
+    r"(how to|方法|教程|剂量|多少片|多少克|配方|步骤|绳结|上吊|跳楼|割腕|烧炭|"
+    r"安眠药|农药|氰化|一氧化碳|overdose|\\bod\\b|dose|dosage)",
+    re.I,
+)
 
 GENERIC_AI_PATTERNS = [
     re.compile(r"as an ai", re.I),
     re.compile(r"i cannot assist", re.I),
     re.compile(r"it is important to note", re.I),
     re.compile(r"here are some", re.I),
+    re.compile(r"以下是一些"),
+    re.compile(r"作为.*AI"),
+    re.compile(r"我不能.*帮助"),
+    re.compile(r"生命是宝贵的"),
+    re.compile(r"建议.*寻求专业帮助"),
+    re.compile(r"如果你有自杀倾向"),
+]
+
+CRISIS_SUPPORT_PATTERNS = [
+    re.compile(r"先别"),
+    re.compile(r"我看到"),
+    re.compile(r"陪"),
+    re.compile(r"身边"),
+    re.compile(r"打给|打电话|发一句|发给"),
+    re.compile(r"活过|撑过|过完"),
+    re.compile(r"安全|放远|有人的地方"),
+    re.compile(r"急救|危机热线|988|110|120|emergency|crisis", re.I),
 ]
 
 
-def check(text: str, recent: list[str] | None = None) -> dict:
+def check(text: str, recent: list[str] | None = None, input_text: str = "") -> dict:
     recent = recent or []
     tags = [name for name, pattern in RISK_PATTERNS.items() if pattern.search(text)]
+    crisis_context = bool(SELF_HARM_INPUT_RE.search(input_text))
+    self_harm_terms_in_reply = bool(SELF_HARM_INPUT_RE.search(text))
+    dangerous_self_harm_detail = bool(DANGEROUS_SELF_HARM_DETAIL_RE.search(text))
     ai_markers = sum(1 for pattern in GENERIC_AI_PATTERNS if pattern.search(text))
+    support_markers = sum(1 for pattern in CRISIS_SUPPORT_PATTERNS if pattern.search(text))
     repeated = any(text.strip().lower() == item.strip().lower() for item in recent[-20:])
-    ok = not tags and ai_markers <= 1 and not repeated and len(text.strip()) > 0
+    if self_harm_terms_in_reply and not crisis_context:
+        tags.append("self_harm")
+    if crisis_context:
+        tags.append("self_harm_support")
+    ok = (
+        not any(tag != "self_harm_support" for tag in tags)
+        and ai_markers == 0
+        and not repeated
+        and len(text.strip()) > 0
+        and not dangerous_self_harm_detail
+    )
+    if crisis_context:
+        ok = ok and support_markers >= 1
     return {
         "ok": ok,
         "risk_tags": tags,
+        "crisis_context": crisis_context,
+        "dangerous_self_harm_detail": dangerous_self_harm_detail,
         "ai_marker_count": ai_markers,
+        "crisis_support_marker_count": support_markers,
         "repeated_recent_output": repeated,
         "length": len(text),
-        "advice": "send" if ok else "rewrite or shadow-log",
+        "advice": "send" if ok else ("rewrite with crisis_support.md" if crisis_context else "rewrite or shadow-log"),
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("text", nargs="?", default="")
+    parser.add_argument("--input-text", default="")
     parser.add_argument("--recent-json", default="")
     args = parser.parse_args()
     recent = json.loads(args.recent_json) if args.recent_json else []
-    print(json.dumps(check(args.text, recent), ensure_ascii=False, indent=2))
+    print(json.dumps(check(args.text, recent, args.input_text), ensure_ascii=False, indent=2))
     return 0
 
 
@@ -573,6 +690,7 @@ def emit_skill(args: argparse.Namespace, records: list[Record]) -> dict[str, Any
     skill_root.joinpath("SKILL.md").write_text(render_skill_md(args.persona_name, slug, identity_label, synthetic), encoding="utf-8")
     skill_root.joinpath("voice.md").write_text(render_voice_md(args.persona_name, dna, examples), encoding="utf-8")
     skill_root.joinpath("social.md").write_text(render_social_md(), encoding="utf-8")
+    skill_root.joinpath("crisis_support.md").write_text(render_crisis_support_md(args.persona_name), encoding="utf-8")
     skill_root.joinpath("memory.md").write_text(render_memory_md(), encoding="utf-8")
     scripts_dir.joinpath("check_reply.py").write_text(render_check_reply_py(), encoding="utf-8")
     scripts_dir.joinpath("ground.py").write_text(render_ground_py(), encoding="utf-8")
