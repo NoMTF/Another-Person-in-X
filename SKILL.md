@@ -23,7 +23,7 @@ This skill turns a coding agent or Claude Code into the deployment and maintenan
 
 ## Workflow
 
-1. **Plan and collect inputs**: target host, profile name, Telegram bot token, model provider/base URL/API key, owner Telegram ID/username, optional X cookies, existing prompt/skill/corpus, and automation level.
+1. **Plan and collect inputs**: target host, profile name, Telegram bot token, model provider/base URL/API key, owner Telegram ID/username, optional X cookies, existing prompt/skill/corpus, and automation level. Use `scripts/credential_helper.py` for manually provided secrets or Cookie-Editor JSON exports; never read browser cookie databases automatically.
 2. **Install runtime**: use `scripts/installer.py` to generate/apply OpenClaw profile config, systemd service, admin API service, state directories, and dependency install commands.
 3. **Create persona**: use `scripts/persona_distill.py` to ingest X/Twitter exports, existing skills, prompt text, chat logs, or documents. Generate a persona skill with retrieval, self-check, variation, and sanitized indexes.
 4. **Enable memory**: follow `references/memory.md`. Use OpenClaw `memory-core`/`memory-wiki` plus the bundled SQLite memory store for high-signal events and persona digests.
@@ -35,6 +35,7 @@ This skill turns a coding agent or Claude Code into the deployment and maintenan
 
 - `scripts/installer.py`: creates an install plan or applies it for Debian/Ubuntu systemd and Docker-style layouts. It installs current OpenClaw unless a version is pinned.
 - `scripts/init_wizard.py`: collects non-secret deployment inputs and writes an env template without storing credentials in the skill.
+- `scripts/credential_helper.py`: safely writes manually provided Telegram/model/X secrets into a local `.env`, imports Cookie-Editor JSON exports, optionally validates Telegram `getMe`, and redacts secret values from output.
 - `scripts/default_persona.py`: generates a clearly labeled synthetic persona skill when no prompt, corpus, or authorized persona is provided.
 - `scripts/persona_distill.py`: normalizes corpora, filters non-target X authors, redacts unsafe/private details, builds indexes, scores multiple distillation strategies, and emits a persona skill.
 - `scripts/x_crawler.py`: crawls owner-authorized X/Twitter user posts with runtime twikit cookies into JSONL for persona distillation.
