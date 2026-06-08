@@ -184,13 +184,13 @@ Telegram 的 bot token 只能从官方 `@BotFather` 获取。它不是 Telegram 
 7. BotFather 会返回一段 HTTP API token，格式类似：
 
 ```text
-1234567890:AAExampleExampleExampleExampleExample
+<数字ID>:<一长串由字母、数字、下划线、横线组成的密钥>
 ```
 
 把它写入 `.env`：
 
 ```env
-TELEGRAM_BOT_TOKEN=1234567890:replace_with_your_real_token
+TELEGRAM_BOT_TOKEN=<你的 BotFather token>
 ```
 
 ### 验证 token 是否可用
@@ -244,6 +244,12 @@ X_AUTH_TOKEN=replace_with_auth_token_value
 X_CT0=replace_with_ct0_value
 ```
 
+也可以先让本项目把相关页面一次打开：
+
+```bash
+python scripts/credential_helper.py --open-guides
+```
+
 ### 通过 Cookie-Editor JSON 导入
 
 Cookie-Editor 支持导出 cookies 为 JSON。你可以把导出的 JSON 文件交给本项目的安全凭据助手读取：
@@ -253,6 +259,18 @@ python scripts/credential_helper.py --cookie-editor-json ./x-cookies.json --env 
 ```
 
 它只会从 JSON 里提取 `auth_token` 和 `ct0`，然后写入本地 `.env`，不会把值打印到终端。
+
+### 通过整段 Cookie 字符串导入
+
+如果你从开发者工具、网络请求或插件里复制到的是一整段 cookie 字符串，也可以直接交给工具解析：
+
+```bash
+python scripts/credential_helper.py \
+  --x-cookie-string "auth_token=replace; ct0=replace; other_cookie=ignored" \
+  --env .env
+```
+
+它只会识别 `auth_token` 和 `ct0`，其他 cookie 会被忽略。
 
 ### 为什么不做“自动读取浏览器 cookie”的一键工具
 
@@ -272,6 +290,12 @@ python scripts/credential_helper.py --cookie-editor-json ./x-cookies.json --env 
 
 文件：[`scripts/credential_helper.py`](scripts/credential_helper.py)
 
+一键打开 BotFather、Telegram 文档、Cookie-Editor、x.com：
+
+```bash
+python scripts/credential_helper.py --open-guides
+```
+
 打印 `.env` 模板：
 
 ```bash
@@ -281,13 +305,13 @@ python scripts/credential_helper.py --print-template
 交互式写入 `.env`：
 
 ```bash
-python scripts/credential_helper.py --interactive --env .env
+python scripts/credential_helper.py --interactive --generate-admin-token --env .env
 ```
 
 交互式写入并验证 Telegram：
 
 ```bash
-python scripts/credential_helper.py --interactive --verify-telegram --env .env
+python scripts/credential_helper.py --interactive --generate-admin-token --verify-telegram --env .env
 ```
 
 从 Cookie-Editor JSON 导入 X cookies：
@@ -296,11 +320,36 @@ python scripts/credential_helper.py --interactive --verify-telegram --env .env
 python scripts/credential_helper.py --cookie-editor-json ./x-cookies.json --env .env
 ```
 
+从整段 cookie 字符串导入：
+
+```bash
+python scripts/credential_helper.py \
+  --x-cookie-string "auth_token=replace; ct0=replace" \
+  --env .env
+```
+
+生成本地管理台 token：
+
+```bash
+python scripts/credential_helper.py --generate-admin-token --env .env
+```
+
+一个比较完整的首次初始化例子：
+
+```bash
+python scripts/credential_helper.py \
+  --interactive \
+  --cookie-editor-json ./x-cookies.json \
+  --generate-admin-token \
+  --verify-telegram \
+  --env .env
+```
+
 命令行直接写入也支持，但不推荐在共享服务器上这样做，因为 shell history 可能记录参数：
 
 ```bash
 python scripts/credential_helper.py \
-  --telegram-token "1234567890:replace" \
+  --telegram-token "<你的 BotFather token>" \
   --model-api-key "replace" \
   --x-auth-token "replace" \
   --x-ct0 "replace" \

@@ -4,16 +4,25 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
-import os
 import re
+import secrets
 import sys
 import urllib.error
 import urllib.request
+import webbrowser
 from pathlib import Path
 from typing import Any
 
 
 TELEGRAM_TOKEN_RE = re.compile(r"^\d{6,}:[A-Za-z0-9_-]{20,}$")
+GUIDE_URLS = {
+    "botfather": "https://t.me/BotFather",
+    "telegram_api": "https://core.telegram.org/bots/api",
+    "cookie_editor": "https://cookie-editor.com/",
+    "cookie_editor_chrome": "https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm",
+    "cookie_editor_firefox": "https://addons.mozilla.org/firefox/addon/cookie-editor/",
+    "x": "https://x.com/",
+}
 SENSITIVE_KEYS = {
     "TELEGRAM_BOT_TOKEN",
     "MODEL_API_KEY",
@@ -116,6 +125,29 @@ def extract_cookie_editor_values(path: Path) -> dict[str, str]:
     return updates
 
 
+def extract_cookie_string_values(cookie_string: str) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for part in cookie_string.split(";"):
+        if "=" not in part:
+            continue
+        name, value = part.split("=", 1)
+        name = name.strip()
+        value = value.strip()
+        if name in {"auth_token", "ct0"} and value:
+            found[name] = value
+    updates: dict[str, str] = {}
+    if found.get("auth_token"):
+        updates["X_AUTH_TOKEN"] = found["auth_token"]
+    if found.get("ct0"):
+        updates["X_CT0"] = found["ct0"]
+    return updates
+
+
+def open_guides() -> None:
+    for url in GUIDE_URLS.values():
+        webbrowser.open(url)
+
+
 def validate_updates(updates: dict[str, str]) -> list[str]:
     warnings: list[str] = []
     token = updates.get("TELEGRAM_BOT_TOKEN", "")
@@ -169,6 +201,20 @@ def print_template() -> None:
     )
 
 
+def print_next_steps(env_path: Path) -> None:
+    _, values = load_env(env_path)
+    missing_x = {key for key in ("X_AUTH_TOKEN", "X_CT0") if not values.get(key)}
+    missing_tg = not values.get("TELEGRAM_BOT_TOKEN")
+    if not missing_x and not missing_tg:
+        return
+    print("next_steps:")
+    if missing_tg:
+        print("  - Telegram: open https://t.me/BotFather, send /newbot, then rerun with --interactive.")
+    if missing_x:
+        print("  - X: log in to https://x.com, copy auth_token and ct0 with Cookie-Editor, then import JSON or paste a cookie string.")
+    print(f"  - Env file: {env_path}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Safely collect manually provided Telegram, model, and X cookie secrets into a local .env file."
@@ -178,20 +224,32 @@ def main() -> int:
     parser.add_argument("--model-api-key", default="", help="OpenAI-compatible model API key.")
     parser.add_argument("--x-auth-token", default="", help="X/Twitter auth_token cookie value.")
     parser.add_argument("--x-ct0", default="", help="X/Twitter ct0 cookie value.")
+    parser.add_argument("--x-cookie-string", default="", help="Raw Cookie header/string copied from x.com containing auth_token and ct0.")
     parser.add_argument("--factory-admin-token", default="", help="Admin API token.")
     parser.add_argument("--cookie-editor-json", default="", help="Cookie-Editor JSON export containing auth_token and ct0.")
     parser.add_argument("--interactive", action="store_true", help="Prompt for missing secrets with hidden input.")
+    parser.add_argument("--generate-admin-token", action="store_true", help="Generate FACTORY_ADMIN_TOKEN if it was not provided.")
+    parser.add_argument("--open-guides", action="store_true", help="Open BotFather, Telegram docs, Cookie-Editor, and x.com in the default browser.")
     parser.add_argument("--verify-telegram", action="store_true", help="Call Telegram getMe to validate TELEGRAM_BOT_TOKEN.")
     parser.add_argument("--print-template", action="store_true", help="Print a blank .env template and exit.")
     args = parser.parse_args()
+
+    if args.open_guides:
+        open_guides()
+        print(json.dumps({"opened": GUIDE_URLS}, ensure_ascii=False, indent=2))
+        return 0
 
     if args.print_template:
         print_template()
         return 0
 
+    env_path = Path(args.env)
+    _, existing_values = load_env(env_path)
     updates: dict[str, str] = {}
     if args.cookie_editor_json:
         updates.update(extract_cookie_editor_values(Path(args.cookie_editor_json)))
+    if args.x_cookie_string:
+        updates.update(extract_cookie_string_values(args.x_cookie_string))
 
     cli_updates = {
         "TELEGRAM_BOT_TOKEN": args.telegram_token.strip(),
@@ -201,6 +259,9 @@ def main() -> int:
         "FACTORY_ADMIN_TOKEN": args.factory_admin_token.strip(),
     }
     updates.update({key: value for key, value in cli_updates.items() if value})
+
+    if args.generate_admin_token and not updates.get("FACTORY_ADMIN_TOKEN") and not existing_values.get("FACTORY_ADMIN_TOKEN"):
+        updates["FACTORY_ADMIN_TOKEN"] = secrets.token_urlsafe(32)
 
     if args.interactive:
         prompts = [
@@ -215,6 +276,10 @@ def main() -> int:
                 value = prompt_secret(label, key)
                 if value:
                     updates[key] = value
+        if not updates.get("X_AUTH_TOKEN") or not updates.get("X_CT0"):
+            cookie_string = getpass.getpass("Full x.com Cookie string containing auth_token and ct0 (blank to skip): ").strip()
+            if cookie_string:
+                updates.update(extract_cookie_string_values(cookie_string))
 
     if not updates:
         print("No secrets provided. Use --interactive, CLI flags, or --cookie-editor-json.", file=sys.stderr)
@@ -230,10 +295,10 @@ def main() -> int:
         if not ok:
             return 3
 
-    env_path = Path(args.env)
     written = write_env(env_path, updates)
     redacted = [key for key in written if key in SENSITIVE_KEYS]
     print(json.dumps({"env": str(env_path), "written_keys": redacted}, ensure_ascii=False, indent=2))
+    print_next_steps(env_path)
     return 0
 
 
