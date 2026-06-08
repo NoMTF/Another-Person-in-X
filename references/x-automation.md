@@ -57,6 +57,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Rank candidates by source priority first, persona keyword relevance second. Do not let search keyword hits outrank followed timeline items before the LLM decision step.
 - Keep `source_rank`, `persona_score`, `priority_score`, and `persona_hits` in the candidate payload so runners and audit logs can explain why a tweet was selected.
 - Do not let proactive browsing collapse into likes only. The decision schema should include `reply`, `like`, `like_reply`, `repost`, `quote`, and `skip`, with separate per-run and per-day caps for replies, likes, reposts, and quotes.
+- `scripts/automation_runner.py --kind browse` must be able to emit `repost` and `quote` candidates, not only `like`. Keep conservative per-run defaults: up to 3 likes, 1 repost, and 1 quote unless the operator overrides them.
 - Strip URLs before keyword scoring so short keywords such as `AI` do not match random t.co path fragments.
 - Skip or heavily downrank self-harm, overdose, doxxing, harassment, and brigading topics before they reach the like/reply decision model.
 
