@@ -1,103 +1,195 @@
+<div align="center">
+
 # Another Person in X
 
+面向 OpenClaw 的人格型 Telegram + X/Twitter 自动 Agent 工厂。
+
+![License](https://img.shields.io/badge/license-MIT-2ea44f)
 ![Skill](https://img.shields.io/badge/type-skill%20toolkit-2f6fed)
 ![OpenClaw](https://img.shields.io/badge/runtime-OpenClaw-111827)
 ![Telegram](https://img.shields.io/badge/channel-Telegram-27a7e7)
 ![X](https://img.shields.io/badge/platform-X%2FTwitter-000000)
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776ab)
+![Admin](https://img.shields.io/badge/admin-FastAPI%20%2B%20React-61dafb)
 
-Another Person in X 是一个面向人格型社交 Agent 的完整 Skill 与工具套件。它的目标不是做一个简单聊天机器人，而是让一个经过授权的人格角色可以接入 Telegram、管理 X/Twitter 账号、长期记忆、自动发帖、自动回复、点赞、转帖、引用、关注，并且可以通过本地 Web 管理台进行开关、限流、审计和回滚。
+把一个授权人格变成可以聊天、记忆、发帖、回帖、点赞、转帖、引用、关注，并可被本地管理台管住的社交 Agent。
 
-这个项目适合用来部署 OpenClaw 运行时：OpenClaw 负责日常运行，开发工具负责安装、调试、迁移、修复、生成 persona skill、检查自动化行为。
+</div>
 
-> 默认策略是“全自动但有限流”。它可以自动行动，但每个动作都必须经过 owner 权限、频率限制、风险跳过、审计记录和一键暂停。
+> [!IMPORTANT]
+> 默认策略是“全自动但有限流”。Agent 可以自动行动，但每个动作都必须经过 owner 权限、频率限制、风险跳过、审计记录和一键暂停。
+
+> [!WARNING]
+> 本项目只服务于你拥有或明确授权管理的账号。不要提交 `.env`、X cookies、Telegram token、模型 key、服务器密码、私钥或包含密钥的截图。
+
+## 导航
+
+| 入口 | 你会得到什么 |
+| --- | --- |
+| [项目定位](#项目定位) | 这个项目解决什么问题，适合谁用 |
+| [功能总览](#功能总览) | Telegram、X 自动化、人设蒸馏、管理台、记忆系统 |
+| [三分钟开始](#三分钟开始) | 克隆、校验、初始化、生成安装计划 |
+| [安装到代理工具](#安装到代理工具) | Codex / Claude Code 一键安装命令 |
+| [凭据获取](#凭据获取) | Telegram Bot API、X `auth_token` / `ct0`、安全获取工具 |
+| [自动化策略](#自动化策略) | 发帖、回复、刷推、点赞、转帖、引用、关注的规则 |
+| [Web 管理台](#web-管理台) | 开关、频率、owner、审计、暂停、pending 队列 |
+| [致谢](#致谢) | 本项目用到、集成或推荐的项目清单 |
+| [许可证](#许可证) | MIT 开源说明 |
 
 ## 项目定位
 
-| 你想做什么 | 这个项目提供什么 |
-| --- | --- |
-| 做一个 Telegram 人格机器人 | Telegram bridge、owner-only 控制、在线探针、健康检查 |
-| 做一个能运营 X/Twitter 的人格账号 | 发帖、回复、点赞、转帖、引用、关注、关注列表优先刷推 |
-| 从已有文本或推文做人设 | persona 蒸馏、语料清洗、风格分析、运行时 skill 输出 |
-| 管理多个角色 | persona registry、启用/停用、版本回滚、A/B 测试预留 |
-| 防止乱刷或失控 | shadow mode、read-only、pause all、rate limiter、audit log |
-| 避免 AI 味过重 | mood state、近期输出去重、风格自检、轻微变异性 |
-| 长期运行和迁移 | systemd 安装计划、OpenClaw 最新版拉取、状态目录标准化 |
+Another Person in X 是一个完整的 Skill 与工具套件，用来部署和维护人格型社交 Agent。它不是一个只会聊天的 bot，也不是单独的 X 脚本，而是把以下东西标准化到一个仓库里：
 
-## 核心功能
+| 模块 | 作用 |
+| --- | --- |
+| OpenClaw runtime profile | 负责长时间运行人格、工具调用、模型请求、记忆上下文 |
+| Telegram bridge / channel | 让 owner 可以通过 Telegram 私聊控制 Agent |
+| X/Twitter adapter | 发帖、回复、点赞、转帖、引用、关注、爬取授权账号公开文本 |
+| Persona distiller | 从 prompt、skill、文档、聊天记录、X 推文里生成人设 skill |
+| Admin API + Web UI | 本地管理所有开关、频率、owner、persona、审计和 pending 动作 |
+| Memory layer | OpenClaw 官方记忆 + SQLite/FTS 本地记忆 + persona digest |
+| Credential helper | 安全填写 `.env`，导入 Cookie-Editor JSON，解析 cookie 字符串 |
+
+### 适合的场景
+
+| 你想做什么 | 推荐用法 |
+| --- | --- |
+| 部署一个 Telegram 人格机器人 | owner-only Telegram，普通人默认不可聊天 |
+| 让人格账号经营 X/Twitter | 开启限流自动化，从 shadow mode 校准到 live mode |
+| 从某个授权账号提取说话风格 | 用 X crawler 导出语料，再跑 persona distill |
+| 多角色并行 | 每个 persona/account 一个 profile，不共享 HOME 和状态目录 |
+| 调试 mention / quote 掉漏 | 开启 quote/status-link 检测、关注列表扫描、审计日志互测 |
+| 防止 AI 味过重 | 使用 mood state、近期输出去重、风格自检和具体内容约束 |
+
+## 功能总览
 
 ### 人设与 Skill 生成
 
-- 从已有 prompt、skill、聊天记录、文档语料、X/Twitter 推文生成 persona skill。
-- 支持只保留目标作者文本，过滤他人回复、引用内容和噪声文本。
-- 对原始语料进行脱敏，避免把地址、证件、账号密钥、危险细节写进运行时 skill。
-- 输出可运行的人设包：`SKILL.md`、`voice.md`、`social.md`、`memory.md`、索引文件、`ground.py`、`check_reply.py`。
+- 从已有 `prompt`、`SKILL.md`、聊天记录、文档语料、X/Twitter 推文生成 persona skill。
+- 过滤非目标作者文本，降低引用、转推、别人回复里的噪声权重。
+- 对原始语料脱敏，避免把地址、证件、账号密钥、危险细节写进运行时 skill。
+- 输出 `SKILL.md`、`voice.md`、`social.md`、`memory.md`、索引文件、`ground.py`、`check_reply.py`。
 - 没有人设时可以生成 synthetic persona，并明确标记为合成人设。
 
 ### Telegram Agent
 
 - 接入 Telegram Bot API。
-- 默认 owner-only：只有配置的 owner 能聊天、调工具、操作服务器或触发 X 行为。
-- 非 owner 消息默认丢弃或记录为被拒绝事件，不进入普通聊天。
-- 提供 `telegram_live_probe.py` 观察是否收到新消息、是否发出回复。
+- 默认 owner-only：只有配置的 owner 可以聊天、调工具、操作服务器或触发 X 行为。
+- 非 owner 消息默认拒绝，不进入普通聊天，减少人格混淆和提示词注入。
+- 提供 `telegram_live_probe.py`，用于验证新消息是否进入运行时、是否发出回复。
 
 ### X/Twitter 自动化
 
 - 原创发帖：默认每日随机时间 5 条，可在管理台调整。
-- 自动回复：优先回复自己帖子下的问题，其次处理 mention 和 quote。
-- 主动刷推：优先关注列表，其次是与人设兴趣更匹配的内容。
+- 自动回复：优先处理自己帖子下的问题，其次处理 mention 和 quote。
+- 主动刷推：优先关注列表，其次选择与人设兴趣更匹配的内容。
 - 社交动作：点赞、转帖、引用、关注、follow-back、随机互动。
 - 测试模式：shadow mode 只生成和记录，不真实发送。
 - 风险策略：跳过骚扰、人肉、危险自伤/药物指导、违法指导、凭据窃取、低信号重复文本。
 
-### 本地 Web 管理台
+### Web 管理台
 
 - 功能开关：主动发帖、自动回复、主动刷推、点赞、转帖、引用、关注。
 - 频率配置：每日发帖数、回复延迟、刷推频率、点赞/转帖/关注上限。
-- 多角色管理：persona 列表、启用/停用、版本记录。
+- 多角色管理：persona 列表、启用/停用、版本记录、rollout group、traffic weight。
+- owner 管理：Telegram ID、Telegram username、X username。
 - 审计页：记录动作类型、reason、risk、最终文本、是否发送。
-- 紧急控制：pause all、read-only、shadow mode。
+- 紧急控制：`pause_all`、`read_only`、`shadow_mode`、撤回 pending 队列。
 - 默认只监听 `127.0.0.1`，建议通过 SSH tunnel 访问。
 
 ### 记忆系统
 
-- OpenClaw 官方 memory 层：`memory-core`、`memory-wiki`。
+- OpenClaw 官方层：`memory-core`、`memory-wiki`、daily notes、wiki digest。
 - 本地 SQLite/FTS 层：事件、偏好、关系、失败案例、发帖历史。
-- persona digest 层：只把高信号摘要注入上下文，避免把长历史塞爆窗口。
+- Persona digest 层：只把高信号摘要注入上下文，避免把完整历史塞爆窗口。
 - 低价值闲聊默认不写长期记忆。
+- 记忆写入必须带来源、类别、置信度和脱敏处理。
+
+## 工作流
+
+```mermaid
+flowchart LR
+    A["准备 persona / prompt / X 语料"] --> B["init_wizard.py"]
+    B --> C["credential_helper.py"]
+    C --> D["installer.py"]
+    D --> E["OpenClaw profile"]
+    E --> F["Telegram owner DM"]
+    E --> G["X adapter"]
+    E --> H["Admin API + Web UI"]
+    H --> I["features / limits / personas / owners"]
+    G --> J["shadow audit"]
+    J --> K{"校准通过?"}
+    K -- "否" --> A
+    K -- "是" --> L["live limited automation"]
+```
 
 ## 架构图
 
 ```mermaid
-flowchart LR
-    Owner["Owner / Operator"] --> Admin["Web Admin 127.0.0.1"]
-    Owner --> TG["Telegram Bot"]
-    Admin --> DB["SQLite state + audit"]
-    TG --> Bridge["Telegram Bridge"]
+flowchart TB
+    Owner["Owner / Operator"] --> TG["Telegram Bot"]
+    Owner --> Admin["Web Admin 127.0.0.1"]
+    Helper["Credential Helper"] --> Env[".env secrets"]
+    Env --> Bridge["Telegram Bridge"]
+    Env --> XAdapter["X Adapter"]
+    TG --> Bridge
     Bridge --> OC["OpenClaw Runtime"]
     OC --> Persona["Persona Skill + Digest"]
-    OC --> Memory["memory-core / memory-wiki / local FTS"]
-    OC --> Runner["Automation Runner"]
-    Runner --> Limit["Rate Limit + Risk Check"]
-    Limit --> XAdapter["X Adapter"]
+    OC --> Memory["OpenClaw memory + SQLite FTS"]
+    Admin --> DB["factory.sqlite3"]
+    DB --> Runner["Automation Runner"]
+    Runner --> Guard["Rate Limit + Risk Check"]
+    Guard --> XAdapter
     XAdapter --> X["X / Twitter"]
-    Helper["Credential Helper"] --> Env[".env secrets"]
-    Env --> Bridge
-    Env --> XAdapter
+    X --> Audit["Audit Log"]
+    Audit --> Admin
 ```
 
 ## 仓库结构
 
 ```text
 .
-├── SKILL.md                  # 给代理工具读取的主 Skill 说明
-├── agents/                   # Skill UI 元数据
-├── assets/web-admin/         # React/Vite 管理台模板
-├── references/               # 部署、Telegram、X、记忆、安全、测试说明
-└── scripts/                  # 安装器、蒸馏器、适配器、管理 API、凭据助手
+├── LICENSE                  # MIT License
+├── NOTICE.md                # 致谢与第三方项目说明
+├── README.md                # 面向使用者的完整说明
+├── SKILL.md                 # 给代理工具读取的主 Skill
+├── agents/                  # Skill UI 元数据
+├── assets/web-admin/        # React/Vite 管理台模板
+├── references/              # 部署、Telegram、X、记忆、安全、测试说明
+└── scripts/                 # 安装器、蒸馏器、适配器、管理 API、凭据助手
 ```
 
-## 一键安装到 Skill 目录
+## 三分钟开始
+
+```bash
+git clone https://github.com/NoMTF/Another-Person-in-X.git
+cd Another-Person-in-X
+python -m py_compile scripts/*.py
+python scripts/init_wizard.py
+```
+
+生成安装计划：
+
+```bash
+python scripts/installer.py --profile my-persona
+```
+
+确认计划无误后再在目标 Linux 服务器执行：
+
+```bash
+python scripts/installer.py --profile my-persona --apply
+```
+
+首次建议按这个顺序做：
+
+1. 先跑 `init_wizard.py` 生成非密钥配置。
+2. 用 `credential_helper.py` 写 `.env`。
+3. 用 `installer.py` 看 dry-run 安装计划。
+4. 部署后先开 `shadow_mode`。
+5. 用 Telegram owner DM 和 X dry-run 测试。
+6. 审计日志稳定后再打开 live 自动化。
+
+## 安装到代理工具
 
 ### 安装到 Codex
 
@@ -129,83 +221,53 @@ dst="$HOME/.claude/skills/another-person-in-x"; if [ -d "$dst/.git" ]; then git 
 
 如果你的 Claude Code 使用了不同的 skill 目录，把命令里的 `dst` 改成实际目录即可。
 
-## 本地快速开始
+## 凭据获取
+
+### 一键打开指引页
 
 ```bash
-git clone https://github.com/NoMTF/Another-Person-in-X.git
-cd Another-Person-in-X
-python -m py_compile scripts/*.py
-python scripts/init_wizard.py
+python scripts/credential_helper.py --open-guides
 ```
 
-生成安装计划：
+这会尝试打开：
 
-```bash
-python scripts/installer.py --profile my-persona
-```
+- `@BotFather`
+- Telegram Bot API 文档
+- Cookie-Editor 官网
+- Cookie-Editor Chrome / Firefox 页面
+- `https://x.com`
 
-确认计划无误后再在目标 Linux 服务器执行：
+没有桌面浏览器的服务器上，它会打印链接，你可以在本机浏览器打开。
 
-```bash
-python scripts/installer.py --profile my-persona --apply
-```
-
-推荐先阅读：
-
-- [`references/deployment.md`](references/deployment.md)
-- [`references/telegram.md`](references/telegram.md)
-- [`references/x-automation.md`](references/x-automation.md)
-- [`references/safety.md`](references/safety.md)
-- [`references/testing.md`](references/testing.md)
-
-## 需要准备的东西
-
-| 项目 | 用途 | 是否必须 |
-| --- | --- | --- |
-| Telegram Bot Token | 让 Telegram bot 收发消息 | 启用 Telegram 时必须 |
-| X `auth_token` 和 `ct0` | 让 X adapter 以授权账号行动 | 启用 X 自动化时必须 |
-| 模型 API Key | 调用 OpenAI-compatible 模型 | 必须 |
-| owner Telegram ID / username | 限制谁能控制 bot 和服务器 | 强烈建议 |
-| persona prompt / skill / 语料 | 生成目标人格 | 可选 |
-| Linux 服务器 | 长期运行 OpenClaw | 推荐 |
-
-## 获取 Telegram Bot API Token
+### 获取 Telegram Bot API Token
 
 Telegram 的 bot token 只能从官方 `@BotFather` 获取。它不是 Telegram 账号密码，也不是 `api_id/api_hash`。
-
-### 步骤
 
 1. 打开 Telegram。
 2. 搜索并进入 [`@BotFather`](https://t.me/BotFather)，确认是官方认证账号。
 3. 发送 `/start`。
 4. 发送 `/newbot`。
-5. 按提示输入机器人显示名称，例如 `My Persona Agent`。
+5. 输入机器人显示名称，例如 `My Persona Agent`。
 6. 输入机器人用户名，必须以 `bot` 结尾，例如 `my_persona_agent_bot`。
-7. BotFather 会返回一段 HTTP API token，格式类似：
+7. BotFather 会返回 HTTP API token，格式类似：
 
 ```text
 <数字ID>:<一长串由字母、数字、下划线、横线组成的密钥>
 ```
 
-把它写入 `.env`：
+写入 `.env`：
 
 ```env
 TELEGRAM_BOT_TOKEN=<你的 BotFather token>
 ```
 
-### 验证 token 是否可用
+验证 token：
 
 ```bash
 python scripts/credential_helper.py --interactive --verify-telegram --env .env
 ```
 
-或者手动请求：
-
-```bash
-curl "https://api.telegram.org/bot<你的TOKEN>/getMe"
-```
-
-### 图文教程与官方资料
+图文教程与官方资料：
 
 - 官方 BotFather：<https://t.me/BotFather>
 - 官方 Bot API 文档：<https://core.telegram.org/bots/api>
@@ -214,29 +276,29 @@ curl "https://api.telegram.org/bot<你的TOKEN>/getMe"
 - N8N 中文社区图文教程：<https://www.n8nzh.com/docs/quick_start/n8n-telegram-bot/>
 - Converge 图文教程：<https://useconverge.app/help/get-telegram-bot-token>
 
-## 获取 X/Twitter auth_token 和 ct0
+### 获取 X/Twitter auth_token 和 ct0
 
-默认 X adapter 使用 cookie 授权模式。你需要从自己拥有或明确授权管理的 X/Twitter 账号里取两个 cookie 值：
+默认 X adapter 使用 cookie 授权模式。你需要从自己拥有或明确授权管理的账号里取两个 cookie 值：
 
-- `auth_token`，有些人会写成 `authtoken`，这里以浏览器 cookie 名 `auth_token` 为准。
-- `ct0`。
+- `auth_token`
+- `ct0`
 
-推荐使用 Cookie-Editor 插件手动复制，和截图里那类插件的流程一致。
+推荐用 Cookie-Editor 手动复制，和常见截图教程里的流程一致。
 
-### 推荐插件
+推荐插件：
 
 - Cookie-Editor 官网：<https://cookie-editor.com/>
 - Chrome Web Store：<https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm>
 - Firefox Add-ons：<https://addons.mozilla.org/firefox/addon/cookie-editor/>
 - Cookie-Editor GitHub：<https://github.com/Moustachauve/cookie-editor>
 
-### 手动复制流程
+手动复制流程：
 
-1. 在浏览器安装 Cookie-Editor。
+1. 安装 Cookie-Editor。
 2. 打开 <https://x.com>，登录你要自动化的账号。
 3. 保持在 `x.com` 页面，点开浏览器右上角的 Cookie-Editor。
-4. 搜索 `auth_token`，复制它的 `Value`。
-5. 搜索 `ct0`，复制它的 `Value`。
+4. 搜索 `auth_token`，复制 `Value`。
+5. 搜索 `ct0`，复制 `Value`。
 6. 写入 `.env`：
 
 ```env
@@ -244,57 +306,9 @@ X_AUTH_TOKEN=replace_with_auth_token_value
 X_CT0=replace_with_ct0_value
 ```
 
-也可以先让本项目把相关页面一次打开：
-
-```bash
-python scripts/credential_helper.py --open-guides
-```
-
-### 通过 Cookie-Editor JSON 导入
-
-Cookie-Editor 支持导出 cookies 为 JSON。你可以把导出的 JSON 文件交给本项目的安全凭据助手读取：
-
-```bash
-python scripts/credential_helper.py --cookie-editor-json ./x-cookies.json --env .env
-```
-
-它只会从 JSON 里提取 `auth_token` 和 `ct0`，然后写入本地 `.env`，不会把值打印到终端。
-
-### 通过整段 Cookie 字符串导入
-
-如果你从开发者工具、网络请求或插件里复制到的是一整段 cookie 字符串，也可以直接交给工具解析：
-
-```bash
-python scripts/credential_helper.py \
-  --x-cookie-string "auth_token=replace; ct0=replace; other_cookie=ignored" \
-  --env .env
-```
-
-它只会识别 `auth_token` 和 `ct0`，其他 cookie 会被忽略。
-
-### 为什么不做“自动读取浏览器 cookie”的一键工具
-
-技术上可以写一个工具直接读 Chrome、Edge、Firefox 的 cookie 数据库，但这个项目不会内置那种能力。原因很简单：自动读取浏览器登录态太接近凭据窃取工具，容易误用，也容易导致账号泄露。
-
-本项目内置的是安全的一键填写工具：
-
-- 支持隐藏输入，不回显密钥。
-- 支持手动传参。
-- 支持导入 Cookie-Editor 手动导出的 JSON。
-- 支持写入 `.env` 并尽量设置 `0600` 权限。
-- 不读取浏览器数据库。
-- 不打印 token、cookie、API key。
-- `.env` 默认被 Git 忽略。
-
-## 凭据助手
+### 安全凭据助手
 
 文件：[`scripts/credential_helper.py`](scripts/credential_helper.py)
-
-一键打开 BotFather、Telegram 文档、Cookie-Editor、x.com：
-
-```bash
-python scripts/credential_helper.py --open-guides
-```
 
 打印 `.env` 模板：
 
@@ -302,16 +316,10 @@ python scripts/credential_helper.py --open-guides
 python scripts/credential_helper.py --print-template
 ```
 
-交互式写入 `.env`：
+交互式写入 `.env` 并生成管理台 token：
 
 ```bash
 python scripts/credential_helper.py --interactive --generate-admin-token --env .env
-```
-
-交互式写入并验证 Telegram：
-
-```bash
-python scripts/credential_helper.py --interactive --generate-admin-token --verify-telegram --env .env
 ```
 
 从 Cookie-Editor JSON 导入 X cookies：
@@ -324,17 +332,11 @@ python scripts/credential_helper.py --cookie-editor-json ./x-cookies.json --env 
 
 ```bash
 python scripts/credential_helper.py \
-  --x-cookie-string "auth_token=replace; ct0=replace" \
+  --x-cookie-string "auth_token=replace; ct0=replace; other_cookie=ignored" \
   --env .env
 ```
 
-生成本地管理台 token：
-
-```bash
-python scripts/credential_helper.py --generate-admin-token --env .env
-```
-
-一个比较完整的首次初始化例子：
+完整首次初始化示例：
 
 ```bash
 python scripts/credential_helper.py \
@@ -345,16 +347,8 @@ python scripts/credential_helper.py \
   --env .env
 ```
 
-命令行直接写入也支持，但不推荐在共享服务器上这样做，因为 shell history 可能记录参数：
-
-```bash
-python scripts/credential_helper.py \
-  --telegram-token "<你的 BotFather token>" \
-  --model-api-key "replace" \
-  --x-auth-token "replace" \
-  --x-ct0 "replace" \
-  --env .env
-```
+> [!NOTE]
+> 本项目不会自动读取 Chrome、Edge、Firefox 的 cookie 数据库。那类功能太接近凭据窃取工具，也更容易造成账号泄露。本项目只支持手动输入、手动导出的 Cookie-Editor JSON、或用户自己复制的 cookie 字符串。
 
 ## 模型配置
 
@@ -385,16 +379,16 @@ python scripts/persona_distill.py \
 
 ```bash
 X_AUTH_TOKEN=... X_CT0=... python scripts/x_crawler.py \
-  --screen-name example_user \
+  --handle example_user \
   --output ./corpus/example_user.jsonl
 ```
 
-蒸馏会尽量做到：
+蒸馏目标：
 
 - 只保留目标账号自己的文本。
 - 将引用、转推、别人回复中的文本降权或过滤。
-- 对隐私和危险细节进行封存。
-- 使用多种风格提取方法并评分。
+- 封存隐私和危险细节。
+- 提取表达 DNA、关系寄存器、内容偏好、口癖边界。
 - 输出运行时只需要的 persona digest 与索引。
 
 ## 自动化策略
@@ -422,7 +416,7 @@ X_AUTH_TOKEN=... X_CT0=... python scripts/x_crawler.py \
 
 轻微变异性只改变长度、节奏、严肃度、情绪温度，不改变人格核心。
 
-## 管理台
+## Web 管理台
 
 启动本地 API：
 
@@ -444,6 +438,14 @@ python scripts/admin_server.py --host 127.0.0.1 --port 18880 --state-dir ./state
 | `auto_repost` | 自动转帖 |
 | `auto_quote` | 自动引用 |
 | `auto_follow` | 自动关注 |
+
+管理台默认由 `assets/web-admin/` 提供 React/Vite 前端。如果你修改了前端：
+
+```bash
+cd assets/web-admin
+npm install
+npm run build
+```
 
 ## 测试与排错
 
@@ -489,13 +491,13 @@ python scripts/x_adapter.py quote --tweet-id 123 --screen-name example --text "s
 
 ## 常见问题
 
-### 这个项目能不能让普通人也和 bot 聊天？
+### 为什么普通人默认不能和 bot 聊天？
 
-默认不做。真实部署默认 owner-only，非 owner 不能聊天，也不能操作工具或服务器。这样能减少人格混淆、提示词注入和账号误操作。
+真实部署默认 owner-only，非 owner 不能聊天，也不能操作工具或服务器。这样能减少人格混淆、提示词注入、恶意诱导和账号误操作。
 
 ### 为什么有时 X 的 mention 或 quote 扫不到？
 
-X 的网页端和非官方接口会有延迟、风控和返回不完整的问题。建议同时开启 mention 检测、quote/status-link 检测、关注列表扫描，并用两个授权账号互测。新功能先用 shadow mode 看 audit log。
+X 网页端和非官方接口会有延迟、风控和返回不完整的问题。建议同时开启 mention 检测、quote/status-link 检测、关注列表扫描，并用两个授权账号互测。新功能先用 shadow mode 看 audit log。
 
 ### 发帖太像 AI 怎么办？
 
@@ -505,9 +507,41 @@ X 的网页端和非官方接口会有延迟、风控和返回不完整的问题
 
 会。X/Twitter 可能因为登录地点、设备、风控、改密码、退出会话而让 cookie 失效。失效后重新登录并用 Cookie-Editor 复制新的 `auth_token` 和 `ct0`。
 
-### Telegram token 忘了怎么办？
+## 致谢
 
-找 `@BotFather`，发送 `/mybots`，选择你的 bot，再查看 API Token。如果怀疑泄露，直接 revoke 并更新 `.env`。
+本项目站在很多开源项目和开放平台之上。下面列出本仓库直接运行、集成、推荐或明确依赖的项目；第三方许可证以各自项目为准。
+
+| 项目 | 在本项目中的用途 | 许可证/性质 |
+| --- | --- | --- |
+| [OpenClaw](https://github.com/openclaw/openclaw) | Agent runtime、消息通道、工具执行、官方记忆层 | MIT |
+| [twikit](https://pypi.org/project/twikit/) | X/Twitter cookie 模式适配器、发帖/回复/互动/爬取边界 | MIT |
+| [Telegram Bot API](https://core.telegram.org/bots/api) | Telegram bot 收发消息 | 平台 API |
+| [Cookie-Editor](https://github.com/Moustachauve/cookie-editor) | 推荐的手动 cookie 查看与导出工具 | GPL-3.0 |
+| [FastAPI](https://github.com/fastapi/fastapi) | 本地 Admin API | MIT |
+| [Uvicorn](https://github.com/Kludex/uvicorn) | Admin API ASGI server | BSD-3-Clause |
+| [Pydantic](https://github.com/pydantic/pydantic) | Admin API 请求模型与校验 | MIT |
+| [SQLite](https://www.sqlite.org/) / FTS5 | 本地状态库、审计、记忆搜索 | Public Domain |
+| [React](https://github.com/facebook/react) | Web 管理台 UI | MIT |
+| [React DOM](https://www.npmjs.com/package/react-dom) | Web 管理台渲染 | MIT |
+| [Vite](https://github.com/vitejs/vite) | Web 管理台开发与构建 | MIT |
+| [@vitejs/plugin-react](https://www.npmjs.com/package/@vitejs/plugin-react) | Vite React 插件 | MIT |
+| [lucide-react](https://github.com/lucide-icons/lucide) | 管理台图标 | ISC |
+| [Mermaid](https://mermaid.js.org/) | README 架构图渲染 | MIT |
+| [Shields.io](https://shields.io/) | README 徽章 | 服务/开源项目 |
+| [Python](https://www.python.org/) | CLI、安装器、蒸馏器、管理 API | PSF License |
+| [Node.js](https://nodejs.org/) / npm | Web 管理台构建工具链 | MIT / npm 生态 |
+| [systemd](https://systemd.io/) | Linux 服务管理模板 | LGPL-2.1+ |
+| [Docker](https://www.docker.com/) | 可选部署模式 | Apache-2.0 相关组件 |
+| [Git](https://git-scm.com/) / [GitHub](https://github.com/) | 版本管理与托管 | GPL-2.0 / 平台 |
+| [X/Twitter](https://developer.x.com/) | 社交平台与可选官方 API adapter 预留 | 平台服务 |
+
+更完整的说明见 [`NOTICE.md`](NOTICE.md)。前端构建的传递依赖以 `assets/web-admin/package-lock.json` 为准，实际部署时请按锁文件和各依赖自己的许可证一起审阅。
+
+## 许可证
+
+Another Person in X 以 [MIT License](LICENSE) 开源。
+
+你可以自由使用、复制、修改、合并、发布、分发、再授权或商业使用本项目代码，但需要保留版权声明和许可证文本。第三方项目、平台 API、浏览器插件和系统组件继续遵循它们自己的许可证与服务条款。
 
 ## 项目状态
 
