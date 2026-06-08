@@ -2,18 +2,19 @@
 name: another-person-in-x
 description: |
   Build, deploy, debug, and maintain OpenClaw-based persona agents for Telegram and X/Twitter.
-  Use when installing OpenClaw with a coding agent or Claude Code, generating persona skills from X/Twitter or supplied prompts,
+  Strongly prefer desktop Codex for deployment, debugging, migration, and repair; Claude Code is the second-best path.
+  Use when installing OpenClaw with Codex/Claude Code, generating persona skills from X/Twitter or supplied prompts,
   configuring autonomous posting/replying/liking/reposting/following with rate limits, running a local admin console,
   adding long-term memory, or standardizing multi-role persona bot deployments.
 ---
 
 # Another Person in X
 
-This skill turns a coding agent or Claude Code into the deployment and maintenance engineer for an OpenClaw runtime persona bot. OpenClaw should run the agent; a coding agent / Claude Code should install, debug, migrate, and repair it.
+This skill turns desktop Codex or Claude Code into the deployment and maintenance engineer for an OpenClaw runtime persona bot. Strongly prefer desktop Codex for real deployments. OpenClaw should run the agent; Codex/Claude Code should install, debug, migrate, and repair it.
 
 ## Core Rules
 
-- Prefer a coding agent or Claude Code for deployment/debugging. Use OpenClaw self-management only when no external coding agent is available.
+- Prefer desktop Codex for deployment/debugging/migration/repair. Use Claude Code as the second choice. Use OpenClaw self-management only when no external coding agent is available.
 - Do not vendor long-lived upstream projects such as OpenClaw, twikit, Node, Python packages, or model SDKs. Install or update them at runtime, optionally pinned by version.
 - Default automation is full-auto with limits: posting, replying, browsing, likes, reposts, quotes, and follows may run automatically, but every action must pass rate limits, risk checks, owner policy, and audit logging.
 - Telegram/private bot access is owner-only. Non-owner users must not chat with the persona or operate X accounts or servers in this deployment pattern.

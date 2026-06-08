@@ -1,4 +1,4 @@
 interface:
   display_name: "Another Person in X"
-  short_description: "Deploy and manage persona Telegram/X agents on OpenClaw"
-  default_prompt: "Use this skill to install OpenClaw, distill personas from X/Twitter or supplied prompts, configure Telegram/X automation, and run the local admin console."
+  short_description: "Codex-first deployment for OpenClaw Telegram/X persona agents"
+  default_prompt: "Use this skill with desktop Codex as the preferred deployer to install OpenClaw, distill personas from X/Twitter or supplied prompts, configure Telegram/X automation, and run the local admin console."
