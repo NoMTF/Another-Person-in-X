@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 
 
 MOODS = ["everyday", "excited", "tired", "serious", "sharp", "very-short", "long-form"]
+REPOST_TO_LIKE_RATIO = 0.5
 
 
 @dataclass
@@ -170,6 +171,12 @@ def quote_text(item: Dict[str, Any], mood: str) -> str:
     return "这条挺值得看一下"
 
 
+def repost_limit_for_likes(max_likes: int) -> int:
+    if max_likes <= 0:
+        return 0
+    return max(1, round(max_likes * REPOST_TO_LIKE_RATIO))
+
+
 def rank_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     if not items:
         return [
@@ -196,13 +203,14 @@ def generate_browse_candidates(
     items: List[Dict[str, Any]],
     max_items: int,
     max_likes: int,
-    max_reposts: int,
+    max_reposts: int | None,
     max_quotes: int,
     max_follows: int,
 ) -> List[Candidate]:
     mood = random.choice(MOODS)
     ranked = rank_items(items)
     candidates: List[Candidate] = []
+    effective_max_reposts = repost_limit_for_likes(max_likes) if max_reposts is None else max_reposts
     counts = {"like": 0, "repost": 0, "quote": 0, "follow": 0}
     seen_targets: set[str] = set()
     seen_follow_targets: set[str] = set()
@@ -237,7 +245,7 @@ def generate_browse_candidates(
                 )
             )
             counts["like"] += 1
-        if source_rank >= 85 and persona_score >= 8 and counts["repost"] < max_reposts:
+        if source_rank >= 85 and persona_score >= 8 and counts["repost"] < effective_max_reposts:
             candidates.append(
                 Candidate(
                     "repost",
@@ -291,7 +299,7 @@ def generate_candidates(
     browse_items: List[Dict[str, Any]] = None,
     max_browse_items: int = 3,
     max_browse_likes: int = 3,
-    max_browse_reposts: int = 1,
+    max_browse_reposts: int | None = None,
     max_browse_quotes: int = 1,
     max_browse_follows: int = 1,
 ) -> List[Candidate]:
@@ -380,7 +388,12 @@ def main() -> int:
     parser.add_argument("--browse-input", default="", help="JSON list of ranked or unranked timeline candidates.")
     parser.add_argument("--max-browse-items", type=int, default=3)
     parser.add_argument("--max-browse-likes", type=int, default=3)
-    parser.add_argument("--max-browse-reposts", type=int, default=1)
+    parser.add_argument(
+        "--max-browse-reposts",
+        type=int,
+        default=None,
+        help="Defaults to half of --max-browse-likes, so repost is second only to like.",
+    )
     parser.add_argument("--max-browse-quotes", type=int, default=1)
     parser.add_argument("--max-browse-follows", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")

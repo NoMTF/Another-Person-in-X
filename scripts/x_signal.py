@@ -196,6 +196,108 @@ def _nested_id(value: Any) -> str:
     return str(value.get("id") or value.get("id_str") or value.get("rest_id") or "")
 
 
+REPLY_ID_KEYS = (
+    "in_reply_to",
+    "in_reply_to_id",
+    "in_reply_to_id_str",
+    "in_reply_to_status_id",
+    "in_reply_to_status_id_str",
+    "reply_to",
+    "reply_to_id",
+    "reply_to_tweet_id",
+    "reply_to_status_id",
+    "reply_to_status_id_str",
+)
+
+
+CONVERSATION_ID_KEYS = (
+    "conversation_id",
+    "conversation_id_str",
+)
+
+
+REPLY_SCREEN_NAME_KEYS = (
+    "in_reply_to_screen_name",
+    "in_reply_to_user_screen_name",
+    "reply_to_screen_name",
+)
+
+
+def tweet_id(tweet: dict[str, Any]) -> str:
+    return str(tweet.get("id") or tweet.get("tweet_id") or tweet.get("id_str") or tweet.get("rest_id") or "")
+
+
+def _collect_ids(tweet: dict[str, Any], keys: tuple[str, ...], include_referenced_replies: bool) -> set[str]:
+    ids: set[str] = set()
+
+    def collect(value: Any, depth: int = 0) -> None:
+        if depth > 4 or value is None:
+            return
+        if isinstance(value, dict):
+            for key in keys:
+                child = value.get(key)
+                if child:
+                    ids.add(str(child))
+            refs = value.get("referenced_tweets") if include_referenced_replies else None
+            if isinstance(refs, list):
+                for ref in refs:
+                    if isinstance(ref, dict) and str(ref.get("type") or "").lower() in {"replied_to", "reply"}:
+                        rid = ref.get("id") or ref.get("id_str")
+                        if rid:
+                            ids.add(str(rid))
+            legacy = value.get("legacy")
+            if isinstance(legacy, dict):
+                collect(legacy, depth + 1)
+            for key in ("reply_to", "in_reply_to", "conversation"):
+                child = value.get(key)
+                if isinstance(child, (dict, list)):
+                    collect(child, depth + 1)
+        elif isinstance(value, list):
+            for child in value[:20]:
+                collect(child, depth + 1)
+
+    collect(tweet)
+    return {item for item in ids if item and item.lower() not in {"none", "null"}}
+
+
+def direct_reply_target_ids(tweet: dict[str, Any]) -> set[str]:
+    return _collect_ids(tweet, REPLY_ID_KEYS, include_referenced_replies=True)
+
+
+def conversation_ids(tweet: dict[str, Any]) -> set[str]:
+    return _collect_ids(tweet, CONVERSATION_ID_KEYS, include_referenced_replies=False)
+
+
+def reply_target_ids(tweet: dict[str, Any]) -> set[str]:
+    return direct_reply_target_ids(tweet) | conversation_ids(tweet)
+
+
+def reply_screen_names(tweet: dict[str, Any]) -> set[str]:
+    names: set[str] = set()
+
+    def collect(value: Any, depth: int = 0) -> None:
+        if depth > 4 or value is None:
+            return
+        if isinstance(value, dict):
+            for key in REPLY_SCREEN_NAME_KEYS:
+                child = value.get(key)
+                if child:
+                    names.add(str(child).lstrip("@"))
+            legacy = value.get("legacy")
+            if isinstance(legacy, dict):
+                collect(legacy, depth + 1)
+            for key in ("reply_to", "in_reply_to", "conversation"):
+                child = value.get(key)
+                if isinstance(child, (dict, list)):
+                    collect(child, depth + 1)
+        elif isinstance(value, list):
+            for child in value[:20]:
+                collect(child, depth + 1)
+
+    collect(tweet)
+    return {item for item in names if item}
+
+
 def _contains_own_object(tweet: dict[str, Any], keys: tuple[str, ...], username: str, monitored_ids: set[str]) -> bool:
     username = username.lower()
     for key in keys:
@@ -234,9 +336,18 @@ def mentions_or_quotes_own(tweet: dict[str, Any], username: str, monitored_tweet
     monitored_url = any(match.group(1) in monitored_ids for match in any_status_re.finditer(blob))
     quote_obj = _contains_own_object(tweet, QUOTE_KEYS, username, monitored_ids)
     repost_obj = _contains_own_object(tweet, REPOST_KEYS, username, monitored_ids)
+    direct_reply_ids = direct_reply_target_ids(tweet)
+    thread_ids = conversation_ids(tweet)
+    reply_ids = direct_reply_ids | thread_ids
+    reply_names = {item.lower() for item in reply_screen_names(tweet)}
+    reply_target_match = bool(monitored_ids.intersection(reply_ids))
+    reply_to_username = bool(username and username.lower() in reply_names)
+    current_tweet_id = tweet_id(tweet)
+    conversation_reply = any(item != current_tweet_id for item in thread_ids)
+    reply_evidence = bool(direct_reply_ids or reply_names or tweet.get("in_reply_to") or conversation_reply)
     injection_hits = prompt_injection_hits(blob)
     kinds = []
-    if tweet.get("in_reply_to"):
+    if reply_evidence:
         kinds.append("reply")
     if mention:
         kinds.append("mention")
@@ -250,6 +361,13 @@ def mentions_or_quotes_own(tweet: dict[str, Any], username: str, monitored_tweet
         "mention": mention,
         "quote": quote_url or monitored_url or quote_obj,
         "repost": repost_obj,
+        "reply": reply_evidence,
+        "reply_target_match": reply_target_match,
+        "reply_to_username": reply_to_username,
+        "reply_target_ids": sorted(reply_ids),
+        "direct_reply_target_ids": sorted(direct_reply_ids),
+        "conversation_ids": sorted(thread_ids),
+        "reply_screen_names": sorted(reply_names),
         "risk_tags": ["prompt_injection"] if injection_hits else [],
         "prompt_injection": bool(injection_hits),
         "prompt_injection_hits": injection_hits,

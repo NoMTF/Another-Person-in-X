@@ -1,0 +1,12 @@
+{
+  "id": "2064012906510086424",
+  "text": "这里是一条普通回复，没有 @ 也没有引用链接，但它挂在被监控的原帖下面。",
+  "in_reply_to_status_id_str": "2063999999999999999",
+  "conversation_id_str": "2063999999999999999",
+  "user": {
+    "screen_name": "YuwenMewo",
+    "following": false
+  },
+  "source": "direct_tweet",
+  "url": "https://x.com/YuwenMewo/status/2064012906510086424"
+}

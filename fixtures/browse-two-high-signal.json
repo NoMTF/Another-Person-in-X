@@ -1,0 +1,28 @@
+[
+  {
+    "id": "2063963579611836422",
+    "text": "AI timeline notes from a followed account about persona agents and X behavior.",
+    "source": "get_latest_timeline",
+    "user": {
+      "screen_name": "example_one"
+    },
+    "persona_hits": ["ai", "timeline", "persona"],
+    "source_rank": 100,
+    "persona_score": 24,
+    "priority_score": 100024,
+    "url": "https://x.com/example_one/status/2063963579611836422"
+  },
+  {
+    "id": "2063963579611836424",
+    "text": "Another high-signal followed timeline item about trans life, AI agents, and daily X behavior.",
+    "source": "get_latest_timeline",
+    "user": {
+      "screen_name": "example_two"
+    },
+    "persona_hits": ["trans", "ai", "timeline"],
+    "source_rank": 100,
+    "persona_score": 24,
+    "priority_score": 100024,
+    "url": "https://x.com/example_two/status/2063963579611836424"
+  }
+]
