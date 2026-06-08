@@ -22,10 +22,88 @@
 > 默认策略是“全自动但有限流”。Agent 可以自动行动，但每个动作都必须经过 owner 权限、频率限制、风险跳过、审计记录和一键暂停。
 
 > [!TIP]
-> 最推荐的使用方式：在桌面端 Codex 打开本仓库或目标服务器工作区，把下面的“一键部署提示词”直接粘给 Codex。Codex 负责安装、调试、迁移、修复；OpenClaw 只负责稳定运行人格 Agent。
+> 最推荐的使用方式：在桌面端 Codex 打开本机或服务器工作区，直接复制下面的“傻瓜式部署”提示词。让 Codex 自己安装依赖、排查报错、生成配置、启动服务；只有确实需要你提供的凭据和选择，最后一次性列出来问你。
 
 > [!WARNING]
 > 本项目只服务于你拥有或明确授权管理的账号。不要提交 `.env`、X cookies、Telegram token、模型 key、服务器密码、私钥或包含密钥的截图。
+
+## 傻瓜式部署
+
+<table>
+  <tr>
+    <td><strong>首选</strong></td>
+    <td>桌面端 Codex</td>
+    <td>最适合安装、迁移、修日志、处理 systemd/Docker/依赖问题。</td>
+  </tr>
+  <tr>
+    <td><strong>次选</strong></td>
+    <td>Claude Code</td>
+    <td>也可以部署和维护，但本项目仍极端推荐 Codex 优先。</td>
+  </tr>
+  <tr>
+    <td><strong>运行时</strong></td>
+    <td>OpenClaw</td>
+    <td>负责人格 Agent 的长期运行，不建议让它自己部署自己。</td>
+  </tr>
+</table>
+
+把下面整段复制给桌面端 Codex 或 Claude Code：
+
+```text
+请帮我安装和部署这个项目：
+https://github.com/NoMTF/Another-Person-in-X
+
+部署目标是一个基于 OpenClaw 的 Telegram + X/Twitter 人格型自动 Agent。
+
+请你作为代码部署代理自主完成以下工作：
+1. 自行检查当前系统环境，判断是本机部署、远程服务器部署、systemd 部署还是 Docker 部署更合适。
+2. 自行安装或更新项目需要的一切依赖，包括 Python、Node.js、OpenClaw、前端构建依赖、Python 包、运行服务和必要的系统组件。
+3. 自行阅读 README.md、SKILL.md、references/ 和 scripts/，按项目推荐流程部署，不要让我手动照着文档一步步操作。
+4. 自行运行检查命令、修复报错、处理端口占用、依赖版本、权限、systemd 服务、日志、路径、构建失败等问题。
+5. 使用 scripts/credential_helper.py 引导我安全写入 .env。不要把 Telegram token、X cookies、模型 API key、服务器密码打印到日志或提交到 Git。
+6. 如果需要人设 prompt、skill、聊天记录或 X 语料，请说明格式，并优先使用 scripts/persona_distill.py 生成人设 skill。
+7. 部署后默认开启 shadow_mode，先完成 Telegram owner-only、Admin API、Web 管理台、X dry-run、rate limiter、audit log、health check 的验证。
+8. 验证通过后，再根据我的确认开启 live limited 自动化，包括发帖、回帖、刷推、点赞、转帖、引用和关注。
+9. 全程遵守 owner-only、限流、风险跳过、审计、一键暂停；不要读取浏览器 cookie 数据库，只接受我手动提供或 Cookie-Editor 导出的凭据。
+
+除非遇到必须由我提供的信息，否则请不要中途停下来问我。能自己判断、安装、修复、验证的都请直接完成。最后再一次性告诉我还需要我提供哪些东西，例如服务器登录方式、Telegram Bot Token、X auth_token/ct0、模型 API Key、owner Telegram ID、是否启用自动发帖和自动化强度。
+```
+
+如果你的 Codex / Claude Code 已支持 skill 目录，可以先执行对应的一键安装命令，再粘贴上面的部署提示词。
+
+<details>
+<summary>Codex 一键安装命令</summary>
+
+Windows PowerShell：
+
+```powershell
+$dst="$env:USERPROFILE\.codex\skills\another-person-in-x"; if (Test-Path "$dst\.git") { git -C $dst pull --ff-only } else { git clone https://github.com/NoMTF/Another-Person-in-X.git $dst }
+```
+
+macOS / Linux：
+
+```bash
+dst="${CODEX_HOME:-$HOME/.codex}/skills/another-person-in-x"; if [ -d "$dst/.git" ]; then git -C "$dst" pull --ff-only; else git clone https://github.com/NoMTF/Another-Person-in-X.git "$dst"; fi
+```
+
+</details>
+
+<details>
+<summary>Claude Code 一键安装命令</summary>
+
+Windows PowerShell：
+
+```powershell
+$dst="$env:USERPROFILE\.claude\skills\another-person-in-x"; if (Test-Path "$dst\.git") { git -C $dst pull --ff-only } else { git clone https://github.com/NoMTF/Another-Person-in-X.git $dst }
+```
+
+macOS / Linux：
+
+```bash
+dst="$HOME/.claude/skills/another-person-in-x"; if [ -d "$dst/.git" ]; then git -C "$dst" pull --ff-only; else git clone https://github.com/NoMTF/Another-Person-in-X.git "$dst"; fi
+```
+
+</details>
 
 ## 导航
 
@@ -33,8 +111,8 @@
 | --- | --- |
 | [项目定位](#项目定位) | 这个项目解决什么问题，适合谁用 |
 | [功能总览](#功能总览) | Telegram、X 自动化、人设蒸馏、管理台、记忆系统 |
+| [傻瓜式部署](#傻瓜式部署) | 复制给 Codex / Claude Code 的完整部署提示词 |
 | [三分钟开始](#三分钟开始) | 克隆、校验、初始化、生成安装计划 |
-| [桌面端部署入口](#桌面端部署入口) | 给 Codex / Claude Code 的一键安装命令与提示词 |
 | [安装到代理工具](#安装到代理工具) | Codex / Claude Code 一键安装命令 |
 | [凭据获取](#凭据获取) | Telegram Bot API、X `auth_token` / `ct0`、安全获取工具 |
 | [自动化策略](#自动化策略) | 发帖、回复、刷推、点赞、转帖、引用、关注的规则 |
@@ -196,72 +274,6 @@ python scripts/installer.py --profile my-persona --apply
 4. 部署后先开 `shadow_mode`。
 5. 用 Telegram owner DM 和 X dry-run 测试。
 6. 审计日志稳定后再打开 live 自动化。
-
-## 桌面端部署入口
-
-### 极端推荐：桌面端 Codex
-
-如果你正在使用桌面端 Codex，直接把这个仓库安装到 Codex skills 目录：
-
-Windows PowerShell：
-
-```powershell
-$dst="$env:USERPROFILE\.codex\skills\another-person-in-x"; if (Test-Path "$dst\.git") { git -C $dst pull --ff-only } else { git clone https://github.com/NoMTF/Another-Person-in-X.git $dst }
-```
-
-macOS / Linux：
-
-```bash
-dst="${CODEX_HOME:-$HOME/.codex}/skills/another-person-in-x"; if [ -d "$dst/.git" ]; then git -C "$dst" pull --ff-only; else git clone https://github.com/NoMTF/Another-Person-in-X.git "$dst"; fi
-```
-
-然后把这段提示词粘给 Codex：
-
-```text
-使用 $another-person-in-x 部署一个 OpenClaw 人格型 Telegram + X/Twitter Agent。
-
-请优先由 Codex 完成安装、调试、迁移和修复，OpenClaw 只作为运行时。
-目标：
-1. 检查当前机器/服务器环境，确认 Python、Node、systemd/Docker、OpenClaw 安装策略。
-2. 运行或参考 scripts/init_wizard.py 收集非密钥配置。
-3. 引导我使用 scripts/credential_helper.py 写入 .env，不要把 token/cookie/key 打印到日志。
-4. 如有人设 prompt、skill、聊天记录或 X 语料，使用 scripts/persona_distill.py 生成人设 skill。
-5. 使用 scripts/installer.py 生成安装计划，确认后应用到目标 profile。
-6. 启动 Admin API 和 Web 管理台，只监听 127.0.0.1，必要时教我用 SSH tunnel 访问。
-7. 默认打开 shadow_mode，完成 Telegram owner DM、X dry-run、rate limiter、audit log 检查。
-8. 验证通过后，再把需要的自动发帖、回复、刷推、点赞、转帖、引用、关注切到 live limited。
-9. 全程遵守 owner-only、限流、风险跳过、审计、一键暂停，不要读取浏览器 cookie 数据库。
-```
-
-### Claude Code 入口
-
-如果你使用 Claude Code，也可以把 skill 装到 Claude 的 skill 目录：
-
-Windows PowerShell：
-
-```powershell
-$dst="$env:USERPROFILE\.claude\skills\another-person-in-x"; if (Test-Path "$dst\.git") { git -C $dst pull --ff-only } else { git clone https://github.com/NoMTF/Another-Person-in-X.git $dst }
-```
-
-macOS / Linux：
-
-```bash
-dst="$HOME/.claude/skills/another-person-in-x"; if [ -d "$dst/.git" ]; then git -C "$dst" pull --ff-only; else git clone https://github.com/NoMTF/Another-Person-in-X.git "$dst"; fi
-```
-
-然后把这段提示词粘给 Claude Code：
-
-```text
-Use the another-person-in-x skill to deploy and maintain an OpenClaw-based Telegram + X/Twitter persona agent.
-
-Important:
-- Prefer Claude Code for installation, debugging, migration, and repair.
-- Keep OpenClaw as the runtime, not the self-deployer.
-- Use scripts/credential_helper.py for manually provided secrets or Cookie-Editor JSON exports.
-- Do not read browser cookie databases.
-- Start in shadow mode, verify Telegram owner-only chat and X dry-run actions, then enable live limited automation only after audit logs look correct.
-- Keep admin API bound to 127.0.0.1 unless a trusted tunnel/reverse proxy is configured.
-```
 
 ## 安装到代理工具
 
