@@ -1,0 +1,17 @@
+[
+  {
+    "id": "2063963579611836423",
+    "text": "AI persona agent notes from a nearby account about X automation and timeline behavior.",
+    "source": "search_persona_neighbors",
+    "user": {
+      "id": "9988776655",
+      "screen_name": "neighbor_example",
+      "following": false
+    },
+    "persona_hits": ["ai", "persona", "timeline"],
+    "source_rank": 55,
+    "persona_score": 24,
+    "priority_score": 55024,
+    "url": "https://x.com/neighbor_example/status/2063963579611836423"
+  }
+]

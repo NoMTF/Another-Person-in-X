@@ -251,11 +251,21 @@ def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str]
             continue
         source = str(item.get("source") or "")
         hits = keyword_hits(" ".join([text, source, str(item.get("user") or ""), str(item.get("quote") or "")]), keywords)
+        existing_hits = [str(hit).strip().lower() for hit in item.get("persona_hits") or [] if str(hit).strip()]
+        merged_hits = list(dict.fromkeys([*hits, *existing_hits]))
+        try:
+            existing_source_rank = int(item.get("source_rank") or 0)
+        except (TypeError, ValueError):
+            existing_source_rank = 0
+        try:
+            existing_persona_score = int(item.get("persona_score") or 0)
+        except (TypeError, ValueError):
+            existing_persona_score = 0
         enriched = dict(item)
         enriched["text"] = text
-        source_rank = source_priority(source)
-        persona_score = min(40, len(hits) * 8)
-        enriched["persona_hits"] = hits[:8]
+        source_rank = max(source_priority(source), existing_source_rank)
+        persona_score = max(min(40, len(merged_hits) * 8), min(40, existing_persona_score))
+        enriched["persona_hits"] = merged_hits[:8]
         enriched["source_rank"] = source_rank
         enriched["persona_score"] = persona_score
         enriched["priority_score"] = source_rank * 1000 + persona_score

@@ -73,6 +73,81 @@ def user_screen_name(value: Any) -> str:
     return ""
 
 
+def truthy_flag(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "yes", "1", "following", "followed"}:
+            return True
+        if normalized in {"false", "no", "0", "none", "not_following", "not-following"}:
+            return False
+    return None
+
+
+def nested_follow_flag(value: Any, depth: int = 0) -> bool | None:
+    if depth > 4 or value is None:
+        return None
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_l = str(key).lower()
+            if key_l in {"following", "is_following", "viewer_is_following", "followed_by_viewer"}:
+                flag = truthy_flag(child)
+                if flag is not None:
+                    return flag
+            if key_l == "connections" and isinstance(child, list):
+                normalized = {str(item).lower() for item in child}
+                if "following" in normalized:
+                    return True
+            if key_l == "relationship" and isinstance(child, str):
+                flag = truthy_flag(child)
+                if flag is not None:
+                    return flag
+        for child in value.values():
+            flag = nested_follow_flag(child, depth + 1)
+            if flag is not None:
+                return flag
+    if isinstance(value, list):
+        normalized = {str(item).lower() for item in value if isinstance(item, str)}
+        if "following" in normalized:
+            return True
+        for child in value[:20]:
+            flag = nested_follow_flag(child, depth + 1)
+            if flag is not None:
+                return flag
+    return None
+
+
+def author_already_followed(item: Dict[str, Any]) -> bool:
+    for value in (item.get("user"), item.get("author"), item):
+        flag = nested_follow_flag(value)
+        if flag is not None:
+            return flag
+    source = str(item.get("source") or "").lower()
+    return any(marker in source for marker in ("get_latest_timeline", "get_timeline", "home_timeline", "followed_timeline"))
+
+
+def author_is_self(item: Dict[str, Any]) -> bool:
+    for key in ("is_self", "own", "owned_by_profile", "self_author"):
+        flag = truthy_flag(item.get(key))
+        if flag:
+            return True
+    return False
+
+
+def author_follow_target(item: Dict[str, Any]) -> str:
+    author = item.get("user") or item.get("author") or {}
+    if isinstance(author, dict):
+        for key in ("id", "id_str", "rest_id", "user_id"):
+            value = author.get(key)
+            if value:
+                return str(value)
+        return user_screen_name(author)
+    return user_screen_name(author)
+
+
 def item_id(item: Dict[str, Any]) -> str:
     return str(item.get("id") or item.get("tweet_id") or item.get("id_str") or item.get("rest_id") or "")
 
@@ -123,12 +198,14 @@ def generate_browse_candidates(
     max_likes: int,
     max_reposts: int,
     max_quotes: int,
+    max_follows: int,
 ) -> List[Candidate]:
     mood = random.choice(MOODS)
     ranked = rank_items(items)
     candidates: List[Candidate] = []
-    counts = {"like": 0, "repost": 0, "quote": 0}
+    counts = {"like": 0, "repost": 0, "quote": 0, "follow": 0}
     seen_targets: set[str] = set()
+    seen_follow_targets: set[str] = set()
     for item in ranked[: max(1, max_items)]:
         target = item_id(item)
         if not target or target in seen_targets:
@@ -179,6 +256,33 @@ def generate_browse_candidates(
                 )
             )
             counts["quote"] += 1
+        follow_target = author_follow_target(item)
+        should_follow = (
+            follow_target
+            and follow_target not in seen_follow_targets
+            and counts["follow"] < max_follows
+            and source_rank >= 55
+            and persona_score >= 16
+            and not author_already_followed(item)
+            and not author_is_self(item)
+        )
+        if should_follow:
+            seen_follow_targets.add(follow_target)
+            candidates.append(
+                Candidate(
+                    "follow",
+                    f"browse discovered high-relevance author worth following; source_rank={source_rank}; persona_score={persona_score}; mood={mood}",
+                    target=follow_target,
+                    screen_name=common["screen_name"],
+                    url=common["url"],
+                    metadata={
+                        **common["metadata"],
+                        "tweet_id": target,
+                        "follow_screen_name": common["screen_name"],
+                    },
+                )
+            )
+            counts["follow"] += 1
     return candidates
 
 
@@ -189,6 +293,7 @@ def generate_candidates(
     max_browse_likes: int = 3,
     max_browse_reposts: int = 1,
     max_browse_quotes: int = 1,
+    max_browse_follows: int = 1,
 ) -> List[Candidate]:
     mood = random.choice(MOODS)
     if kind == "post":
@@ -200,6 +305,7 @@ def generate_candidates(
             max_browse_likes,
             max_browse_reposts,
             max_browse_quotes,
+            max_browse_follows,
         )
     return []
 
@@ -276,6 +382,7 @@ def main() -> int:
     parser.add_argument("--max-browse-likes", type=int, default=3)
     parser.add_argument("--max-browse-reposts", type=int, default=1)
     parser.add_argument("--max-browse-quotes", type=int, default=1)
+    parser.add_argument("--max-browse-follows", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -290,6 +397,7 @@ def main() -> int:
         args.max_browse_likes,
         args.max_browse_reposts,
         args.max_browse_quotes,
+        args.max_browse_follows,
     )
     results = []
     for candidate in candidates:

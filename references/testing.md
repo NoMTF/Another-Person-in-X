@@ -66,15 +66,17 @@ Run the admin API on a temporary state dir, then feed a followed-timeline fixtur
 ```bash
 python scripts/admin_server.py --host 127.0.0.1 --port 18880 --state-dir ./tmp-state
 python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fixtures/browse-high-signal.json --max-browse-items 1 --max-browse-reposts 1 --max-browse-quotes 1
+python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fixtures/browse-high-signal-unfollowed.json --max-browse-items 1 --max-browse-follows 1
 ```
 
 Expected:
 
-- The result contains `like`, `repost`, and `quote` candidates for the browse item.
+- The result contains `like`, `repost`, and `quote` candidates for the high-signal followed-timeline browse item.
+- The unfollowed-author fixture contains a `follow` candidate when the author is high-relevance and not already followed.
 - Each candidate calls `/api/rate/check`.
 - Each candidate writes an audit row.
 - `shadow=true` and no real X action is sent.
-- If the admin feature toggle for `repost` or `quote` is disabled, the corresponding candidate is skipped with `feature_disabled`.
+- If the admin feature toggle for `repost`, `quote`, or `follow` is disabled, the corresponding candidate is skipped with `feature_disabled`.
 
 ## Deployment Test
 
