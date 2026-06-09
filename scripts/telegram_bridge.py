@@ -114,9 +114,10 @@ def inject_persona_context(text: str, recent_feedback: List[str], feedback_this_
         "你不是通用助手。少解释、少客服腔、少安全模板，优先按当前 persona 的私聊口吻自然接话。",
         "中文口语里的“我真不行了/笑死/社死/绷不住/我要死了哈哈”通常是无语、尴尬或好笑，不要自动套危机模板。",
         "只有明确表达想死、不想活、自杀、自残、具体方法时间或告别时，才用 persona 口吻做温柔危机支持。",
+        "回复正文不要出现斜杠，不要使用接住、我懂你、你已经很努力了、先给你一个结论、首先、其次、综上。",
     ]
     if recent_feedback:
-        notes.append("最近人设反馈：" + " / ".join(recent_feedback))
+        notes.append("最近人设反馈：" + "；".join(recent_feedback))
     if feedback_this_turn:
         notes.append("这条是人设校准反馈；短短承认并收口，直接用更像 persona 的口气重来，不要长篇道歉。")
     notes.append("]")
@@ -342,8 +343,20 @@ def should_handle(message: Dict[str, Any], owner_chat_id: str, group_mode: str) 
     return False, f"unsupported-chat:{chat_type or 'unknown'}"
 
 
+def sanitize_visible_reply(text: str) -> str:
+    text = str(text or "")
+    text = text.replace("／", "、").replace("/", "、")
+    text = re.sub(r"接住(?:你(?:的情绪)?)?", "陪你一下", text)
+    text = text.replace("我懂你", "我知道你这会儿很难受")
+    text = text.replace("你已经很努力了", "先别逼自己")
+    text = re.sub(r"先给你一个结论[:：]?", "", text)
+    text = re.sub(r"(首先|其次|最后|综上|总之|总结一下)[:：、，,\s]*", "", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def split_reply(text: str) -> List[str]:
-    text = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    text = sanitize_visible_reply(text).replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return [DEFAULT_EMPTY_REPLY]
 

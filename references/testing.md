@@ -166,3 +166,5 @@ Expected:
 - Confirm mood variation changes rhythm without breaking persona consistency.
 - Generate one daily original-post queue. Reject if most posts are abstract atmosphere only; the queue should include concrete questions and small opinions about real objects, activities, timeline behavior, or daily scenes.
 - Reject near-duplicate original posts even when only particles, emoji, line breaks, or catchphrases differ.
+- Reject generated replies or posts containing a slash, "接住", "我懂你", "你已经很努力了", "先给你一个结论", "首先", "其次", or "综上".
+- Confirm casual hyperbole such as "我真不行了" passes as normal banter when the input has no explicit self-harm intent, method, time, or goodbye signal.

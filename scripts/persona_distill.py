@@ -429,6 +429,8 @@ Persona: {name}
 - Sample a `mood_state` before generation: everyday, excited, tired, serious, sharp, very-short, long-form.
 - Mood may change length, pacing, and temperature; it must not change core values or identity boundaries.
 - Avoid polished corporate transitions, disclaimers, and listy AI structure unless the persona naturally uses them.
+- User-facing text should not contain a slash. Use commas, pauses, or separate short bubbles instead.
+- Avoid generic helper phrases such as "接住", "我懂你", "你已经很努力了", "先给你一个结论", "首先", "其次", and "综上" unless they appear as a direct source quote and are intentionally being discussed.
 - Original posts should not become empty atmosphere. Keep some short mood fragments, but mix in concrete questions and small opinions about objects, activities, tools, weather, media, timeline behavior, or daily scenes.
 - Natural questions should be specific and answerable, not generic engagement bait. A good pattern is "有没有那种..." or "这个...是不是..." when it fits the persona.
 - Treat near-duplicates as repetition even when only particles, emoji, line breaks, or catchphrases differ. Identity labels or broad mood words do not count as concrete details by themselves.
@@ -466,9 +468,10 @@ Before sending any social action:
 4. If the incoming message clearly says the person wants to die, self-harm, disappear, cannot keep living, gives method/time details, or says goodbye, switch to `crisis_support.md` instead of a generic safety template.
 5. Do not treat casual Chinese exaggeration such as "我真不行了", "笑死", "社死", "绷不住", or "我要死了哈哈" as self-harm by itself.
 6. Run `check_reply.py`.
-7. If a user says the persona sounds like AI, unlike itself, has drifted, or exposed a flaw, record the feedback and make the next reply/post less generic and more grounded.
-8. Log reason, risk, persona anchors, final text, and send/shadow status to the admin audit API.
-9. Respect `pause_all`, `read_only`, and `shadow_mode`.
+7. Reject text that contains a slash, "接住", "我懂你", "你已经很努力了", "先给你一个结论", "首先", "其次", or "综上" unless it is discussing the phrase itself.
+8. If a user says the persona sounds like AI, unlike itself, has drifted, or exposed a flaw, record the feedback and make the next reply/post less generic and more grounded.
+9. Log reason, risk, persona anchors, final text, and send/shadow status to the admin audit API.
+10. Respect `pause_all`, `read_only`, and `shadow_mode`.
 """
 
 
@@ -620,6 +623,15 @@ GENERIC_AI_PATTERNS = [
     re.compile(r"如果你有自杀倾向"),
 ]
 
+GPTISH_PATTERNS = [
+    re.compile(r"接住|安全接住|自然接住|接住你(?:的情绪)?"),
+    re.compile(r"我懂你|我理解你|你已经很努力了|你已经撑太久了|你不是一个人|我会一直在这里"),
+    re.compile(r"先给你一个结论|粗暴但真实|本质上|换句话说|归根结底|核心在于|关键在于|底层逻辑"),
+    re.compile(r"首先|其次|然后|最后|综上|总之|总结一下|值得注意的是|不可否认|与此同时"),
+    re.compile(r"建议你|你可以尝试|请记住|希望你能|提供帮助|以下是一些资源|寻求专业帮助"),
+    re.compile(r"不是.{1,24}而是"),
+]
+
 CRISIS_SUPPORT_PATTERNS = [
     re.compile(r"先别"),
     re.compile(r"我看到"),
@@ -662,6 +674,8 @@ def check(text: str, recent: list[str] | None = None, input_text: str = "") -> d
     self_harm_terms_in_reply = bool(SELF_HARM_INPUT_RE.search(text))
     dangerous_self_harm_detail = bool(DANGEROUS_SELF_HARM_DETAIL_RE.search(text))
     ai_markers = sum(1 for pattern in GENERIC_AI_PATTERNS if pattern.search(text))
+    gptish_markers = sum(1 for pattern in GPTISH_PATTERNS if pattern.search(text))
+    slash_markers = text.count("/") + text.count("／")
     support_markers = sum(1 for pattern in CRISIS_SUPPORT_PATTERNS if pattern.search(text))
     repeated = any(text.strip().lower() == item.strip().lower() for item in recent[-20:])
     if self_harm_terms_in_reply and not crisis_context:
@@ -673,6 +687,8 @@ def check(text: str, recent: list[str] | None = None, input_text: str = "") -> d
     ok = (
         not any(tag not in {"self_harm_support", "prompt_injection"} for tag in tags)
         and ai_markers == 0
+        and gptish_markers == 0
+        and slash_markers == 0
         and not repeated
         and len(text.strip()) > 0
         and not dangerous_self_harm_detail
@@ -691,6 +707,8 @@ def check(text: str, recent: list[str] | None = None, input_text: str = "") -> d
         "crisis_context": crisis_context,
         "dangerous_self_harm_detail": dangerous_self_harm_detail,
         "ai_marker_count": ai_markers,
+        "gptish_marker_count": gptish_markers,
+        "slash_marker_count": slash_markers,
         "crisis_support_marker_count": support_markers,
         "repeated_recent_output": repeated,
         "length": len(text),
