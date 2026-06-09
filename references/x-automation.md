@@ -23,10 +23,13 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - All actions go through admin API rate checks.
 - Default original posts: 5 per day at randomized times.
 - Original-post generation must keep the feed non-empty: roughly 25% concrete questions and 20% concrete opinions/stances, with the remainder split between grounded daily observations and a smaller number of mood fragments.
-- "Concrete" means a real object, activity, setting, or timeline topic such as wallpaper, phone, desk, weather, photography, clothing, games, sleep, food, or X behavior. Avoid generic engagement bait such as "大家怎么看".
+- "Concrete" means a real object, activity, setting, or timeline topic such as wallpaper, phone, desk, weather, photography, clothing, games, sleep, food, X behavior, or a persona-fit public identity/relationship question. Avoid generic engagement bait such as "大家怎么看".
 - Do not count identity labels, bare numbers, broad night/survival words, or catchphrases as concrete details by themselves. Near-duplicate posts with only particles, emoji, or catchphrase changes must be rejected.
 - Original-post schedulers must check recent posted and pending history before filling a plan. High-repeat topic groups such as wallpaper/phone/desktop should cool down across runs, repeated question prefixes such as "有没有" should be capped, and location/address questions should be rejected.
 - If an existing daily plan has posted items but no pending items, refill the remaining day without deleting posted evidence. If generation cannot fill every missing slot in one pass, keep the valid posts and let the next scheduler run continue the refill instead of leaving the feed empty.
+- Original-post schedulers should fetch recent own tweets from the runtime X API and use them as automatic style/stance calibration. Owner feedback helps, but correction must not depend on the owner noticing drift.
+- Original-post topic selection must not be a keyword preset. Generate a small set of persona-fit topic contexts from persona anchors, recent self tweets, recent history, and feedback, then draft from those contexts. A second persona judge should accept only drafts that are persona-fit, topicful or lived-specific, non-template, non-repetitive, and safe.
+- Examples such as "MtF 为什么会被误解成男娘啊唔" are allowed as direction only, not templates. Topicful identity/community posts are valid only when they fit the persona and read like a real short thought.
 - Reply delay defaults to 45-600 seconds.
 - New personas start in shadow mode until manually reviewed.
 - Oneshot watcher/scheduler/proactive services must wait for the local X API `/health` endpoint before calling `/replies/check`, `/browse/check`, or `/tweet`.
@@ -65,6 +68,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Runtime proactive browse scripts should usually produce more bare reposts than quotes. Quotes are for cases where the persona has a short natural sentence to add; otherwise a high-match followed/monitored item can be bare-reposted or skipped.
 - Runtime proactive browse scripts must only increment `reposts_sent` / daily repost counters after adapter metadata proves `verified=true` or the API status endpoint returns `retweeted=true`.
 - Browse-time follows should only target high-relevance authors that are not already followed and are not the active account itself. Followed-timeline items are treated as already followed unless the source payload explicitly says otherwise.
+- Browse-time reply/quote decisions should use a context-judgment pass over the full tweet, quote/status evidence, image summary, persona anchors, and recent own tweets. Regex and keyword matches are cheap signals only; they must not decide slang meaning, crisis status, or fact claims by themselves.
 - Strip URLs before keyword scoring so short keywords such as `AI` do not match random t.co path fragments.
 - Skip or heavily downrank self-harm, overdose, doxxing, harassment, and brigading topics before they reach proactive like/repost/quote/follow decisions.
 - If a direct reply, mention, or quote of the bot contains self-harm or "want to die" language, route it to the persona crisis-support reply mode instead of the normal browse engagement model.

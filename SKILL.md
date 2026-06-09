@@ -65,7 +65,9 @@ This skill turns desktop Codex or Claude Code into the deployment and maintenanc
 - Persona feedback: runtime agents store owner/public feedback such as "AI 味", "不像本人", or "口吻不对" in `persona_feedback.jsonl` and inject only a compact recent digest into replies, proactive browsing, quotes, and original-post generation.
 - Crisis nuance: casual Chinese exaggeration such as "我真不行了", "笑死", "社死", "绷不住", or "我要死了哈哈" is not self-harm by itself; explicit intent, method/time details, goodbye notes, or "不想活/想死/撑不下去" still trigger persona-faithful crisis support.
 - Anti-AI style guard: runtime self-checks reject user-facing text with a slash, numbered advice, generic comfort formulas, essay openings, or helper phrases such as "接住", "稳稳接住", "我懂你", "你已经很努力了", "先给你一个结论", "一句话总结", "本质上", "首先", "其次", and "综上".
-- Context guard: factual or time-sensitive claims must be searched or backed by verified context before posting; unfamiliar Chinese internet slang and short-number shorthand should be understood from context rather than explained from a preset.
+- Context judge: regex and keyword matches are cheap signals only. Reply, quote, browse, and crisis decisions must use a context-judgment pass over the full text, quoted/status-link evidence, image summary, retrieved persona anchors, and recent self tweets. Do not infer meaning from a single keyword, short number, or slang token.
+- Recent-self calibration: before replies, quotes, proactive interactions, or original posts, runtime scripts should fetch the account's recent own tweets and use them as a compact style/stance calibration sample. This is automatic self-correction, separate from owner feedback.
+- Original-post topicing: do not use a fixed topic preset as the primary generator. First propose persona-fit topic contexts from anchors, recent self tweets, and feedback, then generate drafts and run a persona judge for fit, topicfulness, non-template quality, non-repetition, and safety. Identity or community topics such as "MtF 被误解成男娘" may be valid only when they fit the persona and read like a natural post, not a forced keyword.
 
 ## Reference Loading
 
