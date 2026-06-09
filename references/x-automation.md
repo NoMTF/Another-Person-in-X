@@ -25,6 +25,8 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Original-post generation must keep the feed non-empty: roughly 25% concrete questions and 20% concrete opinions/stances, with the remainder split between grounded daily observations and a smaller number of mood fragments.
 - "Concrete" means a real object, activity, setting, or timeline topic such as wallpaper, phone, desk, weather, photography, clothing, games, sleep, food, or X behavior. Avoid generic engagement bait such as "大家怎么看".
 - Do not count identity labels, bare numbers, broad night/survival words, or catchphrases as concrete details by themselves. Near-duplicate posts with only particles, emoji, or catchphrase changes must be rejected.
+- Original-post schedulers must check recent posted and pending history before filling a plan. High-repeat topic groups such as wallpaper/phone/desktop should cool down across runs, repeated question prefixes such as "有没有" should be capped, and location/address questions should be rejected.
+- If an existing daily plan has posted items but no pending items, refill the remaining day without deleting posted evidence. If generation cannot fill every missing slot in one pass, keep the valid posts and let the next scheduler run continue the refill instead of leaving the feed empty.
 - Reply delay defaults to 45-600 seconds.
 - New personas start in shadow mode until manually reviewed.
 - Oneshot watcher/scheduler/proactive services must wait for the local X API `/health` endpoint before calling `/replies/check`, `/browse/check`, or `/tweet`.
@@ -58,7 +60,8 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Rank candidates by source priority first, persona keyword relevance second. Do not let search keyword hits outrank followed timeline items before the LLM decision step.
 - Keep `source_rank`, `persona_score`, `priority_score`, and `persona_hits` in the candidate payload so runners and audit logs can explain why a tweet was selected.
 - Do not let proactive browsing collapse into likes only. The decision schema should include `reply`, `like`, `like_reply`, `repost`, `quote`, `follow`, and `skip`, with separate per-run and per-day caps for replies, likes, reposts, quotes, and follows.
-- `scripts/automation_runner.py --kind browse` must be able to emit `repost`, `quote`, and `follow` candidates, not only `like`. Default repost volume is half of like volume, making repost second only to likes. Keep conservative per-run defaults: up to 3 likes, 2 reposts, 1 quote, and 1 follow unless the operator overrides them.
+- `scripts/automation_runner.py --kind browse` must be able to emit `quote`, `repost`, and `follow` candidates, not only `like`. Default quote volume is higher than repost volume; quote is the main boost action because it adds persona context, while bare repost is a small quote-gated supplement.
+- Runtime proactive browse scripts should prefer quote for high-match followed/monitored items when they can produce a short persona-natural sentence. Bare reposts must not outnumber quotes in a run/day unless the operator explicitly overrides the mix.
 - Runtime proactive browse scripts must only increment `reposts_sent` / daily repost counters after adapter metadata proves `verified=true` or the API status endpoint returns `retweeted=true`.
 - Browse-time follows should only target high-relevance authors that are not already followed and are not the active account itself. Followed-timeline items are treated as already followed unless the source payload explicitly says otherwise.
 - Strip URLs before keyword scoring so short keywords such as `AI` do not match random t.co path fragments.

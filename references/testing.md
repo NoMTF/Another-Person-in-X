@@ -101,14 +101,14 @@ Run the admin API on a temporary state dir, then feed a followed-timeline fixtur
 ```bash
 python scripts/admin_server.py --host 127.0.0.1 --port 18880 --state-dir ./tmp-state
 python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fixtures/browse-high-signal.json --max-browse-items 1 --max-browse-reposts 1 --max-browse-quotes 1
-python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fixtures/browse-two-high-signal.json --max-browse-items 2 --max-browse-likes 2 --max-browse-quotes 0 --max-browse-follows 0
+python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fixtures/browse-two-high-signal.json --max-browse-items 2 --max-browse-likes 3 --max-browse-follows 0
 python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fixtures/browse-high-signal-unfollowed.json --max-browse-items 1 --max-browse-follows 1
 ```
 
 Expected:
 
 - The result contains `like`, `repost`, and `quote` candidates for the high-signal followed-timeline browse item.
-- With two high-signal items and two likes, the default repost cap emits one repost, proving repost volume is 0.5x likes.
+- With multiple high-signal followed-timeline items, quote candidates appear before bare repost candidates, and default bare repost count stays lower than quote count.
 - The unfollowed-author fixture contains a `follow` candidate when the author is high-relevance and not already followed.
 - Each candidate calls `/api/rate/check`.
 - Each candidate writes an audit row.

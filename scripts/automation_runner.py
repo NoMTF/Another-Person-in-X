@@ -15,7 +15,8 @@ from typing import Any, Dict, List
 
 
 MOODS = ["everyday", "excited", "tired", "serious", "sharp", "very-short", "long-form"]
-REPOST_TO_LIKE_RATIO = 0.5
+REPOST_TO_LIKE_RATIO = 0.2
+QUOTE_TO_LIKE_RATIO = 0.7
 
 
 @dataclass
@@ -174,7 +175,13 @@ def quote_text(item: Dict[str, Any], mood: str) -> str:
 def repost_limit_for_likes(max_likes: int) -> int:
     if max_likes <= 0:
         return 0
-    return max(1, round(max_likes * REPOST_TO_LIKE_RATIO))
+    return max(1, round(max_likes * REPOST_TO_LIKE_RATIO)) if max_likes >= 3 else 0
+
+
+def quote_limit_for_likes(max_likes: int) -> int:
+    if max_likes <= 0:
+        return 0
+    return max(1, round(max_likes * QUOTE_TO_LIKE_RATIO))
 
 
 def rank_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -204,13 +211,14 @@ def generate_browse_candidates(
     max_items: int,
     max_likes: int,
     max_reposts: int | None,
-    max_quotes: int,
+    max_quotes: int | None,
     max_follows: int,
 ) -> List[Candidate]:
     mood = random.choice(MOODS)
     ranked = rank_items(items)
     candidates: List[Candidate] = []
     effective_max_reposts = repost_limit_for_likes(max_likes) if max_reposts is None else max_reposts
+    effective_max_quotes = quote_limit_for_likes(max_likes) if max_quotes is None else max_quotes
     counts = {"like": 0, "repost": 0, "quote": 0, "follow": 0}
     seen_targets: set[str] = set()
     seen_follow_targets: set[str] = set()
@@ -245,16 +253,7 @@ def generate_browse_candidates(
                 )
             )
             counts["like"] += 1
-        if source_rank >= 85 and persona_score >= 8 and counts["repost"] < effective_max_reposts:
-            candidates.append(
-                Candidate(
-                    "repost",
-                    f"browse selected high-signal item worth boosting; source_rank={source_rank}; persona_score={persona_score}; mood={mood}",
-                    **common,
-                )
-            )
-            counts["repost"] += 1
-        if (persona_score >= 16 or (source_rank >= 100 and persona_score >= 8)) and counts["quote"] < max_quotes:
+        if (persona_score >= 16 or (source_rank >= 100 and persona_score >= 8)) and counts["quote"] < effective_max_quotes:
             candidates.append(
                 Candidate(
                     "quote",
@@ -264,6 +263,20 @@ def generate_browse_candidates(
                 )
             )
             counts["quote"] += 1
+        if (
+            source_rank >= 90
+            and persona_score >= 16
+            and counts["repost"] < effective_max_reposts
+            and counts["repost"] < counts["quote"]
+        ):
+            candidates.append(
+                Candidate(
+                    "repost",
+                    f"browse selected high-signal item worth quiet boosting after quote coverage; source_rank={source_rank}; persona_score={persona_score}; mood={mood}",
+                    **common,
+                )
+            )
+            counts["repost"] += 1
         follow_target = author_follow_target(item)
         should_follow = (
             follow_target
@@ -300,7 +313,7 @@ def generate_candidates(
     max_browse_items: int = 3,
     max_browse_likes: int = 3,
     max_browse_reposts: int | None = None,
-    max_browse_quotes: int = 1,
+    max_browse_quotes: int | None = None,
     max_browse_follows: int = 1,
 ) -> List[Candidate]:
     mood = random.choice(MOODS)
@@ -392,9 +405,14 @@ def main() -> int:
         "--max-browse-reposts",
         type=int,
         default=None,
-        help="Defaults to half of --max-browse-likes, so repost is second only to like.",
+        help="Defaults to a small quote-gated fraction of --max-browse-likes.",
     )
-    parser.add_argument("--max-browse-quotes", type=int, default=1)
+    parser.add_argument(
+        "--max-browse-quotes",
+        type=int,
+        default=None,
+        help="Defaults to about 0.7x --max-browse-likes, making quotes the main boost action.",
+    )
     parser.add_argument("--max-browse-follows", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
