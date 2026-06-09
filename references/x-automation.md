@@ -9,6 +9,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Preferred adapter: twikit cookie mode for owner-controlled accounts.
 - Reserved adapter: official X API when the deployment has paid access.
 - Every adapter method must support `dry_run` or `shadow_mode`.
+- Repost success must be verified after the write. A twikit `retweet()` HTTP 200 or GraphQL response alone is not enough; fetch the target tweet again with the same authenticated account and require viewer `retweeted=true` before counting the action, spending the daily repost quota, or writing a `*_sent` audit row. If verification fails, log `verified=false` / `repost_failed` and do not silently downgrade it into a like.
 
 ## Allowed Default Actions
 
@@ -58,6 +59,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Keep `source_rank`, `persona_score`, `priority_score`, and `persona_hits` in the candidate payload so runners and audit logs can explain why a tweet was selected.
 - Do not let proactive browsing collapse into likes only. The decision schema should include `reply`, `like`, `like_reply`, `repost`, `quote`, `follow`, and `skip`, with separate per-run and per-day caps for replies, likes, reposts, quotes, and follows.
 - `scripts/automation_runner.py --kind browse` must be able to emit `repost`, `quote`, and `follow` candidates, not only `like`. Default repost volume is half of like volume, making repost second only to likes. Keep conservative per-run defaults: up to 3 likes, 2 reposts, 1 quote, and 1 follow unless the operator overrides them.
+- Runtime proactive browse scripts must only increment `reposts_sent` / daily repost counters after adapter metadata proves `verified=true` or the API status endpoint returns `retweeted=true`.
 - Browse-time follows should only target high-relevance authors that are not already followed and are not the active account itself. Followed-timeline items are treated as already followed unless the source payload explicitly says otherwise.
 - Strip URLs before keyword scoring so short keywords such as `AI` do not match random t.co path fragments.
 - Skip or heavily downrank self-harm, overdose, doxxing, harassment, and brigading topics before they reach proactive like/repost/quote/follow decisions.

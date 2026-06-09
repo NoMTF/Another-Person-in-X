@@ -129,6 +129,7 @@ Expected:
   - Account A reposts a recent Account B post.
   - Account B runs `/replies/check` with `mark_seen=false` and should see the repost with `kinds` containing `repost`; auto-reply should usually skip pure reposts with no new text.
   - Fetch both created tweet IDs with `/tweet/get` and verify quote and repost payloads are separate fields, not collapsed into the same kind.
+  - For every live repost test, verify from Account A's authenticated view that the target tweet has `retweeted=true` or adapter metadata has `verified=true`. Do not accept only HTTP 200, `create_retweet`, or a local `proactive_repost_sent` log without this status check.
 - Telegram bot receives and sends a normal owner DM reply.
 - Live Telegram inbound is proven only when logs show `Inbound message ... -> @BOT_USERNAME` and a profile session contains a non-heartbeat user message. Heartbeat sessions prove model liveness, not chat ingress.
 - In bridge mode, live Telegram inbound/reply can also be proven by `BRIDGE_INBOUND` and `BRIDGE_OUTBOUND` in `{state_dir}/telegram-bridge/events.jsonl`.

@@ -86,6 +86,106 @@ class TwikitAdapter(BaseAdapter):
         except Exception as exc:
             return ActionResult(False, action, self.name, False, error=str(exc), metadata=payload)
 
+    @staticmethod
+    def _safe_getattr(obj: Any, name: str, default: Any = None) -> Any:
+        try:
+            if isinstance(obj, dict):
+                return obj.get(name, default)
+            return getattr(obj, name)
+        except Exception:
+            return default
+
+    @classmethod
+    def _current_user_retweeted(cls, tweet: Any) -> bool:
+        for source in (tweet, cls._safe_getattr(tweet, "_legacy"), cls._safe_getattr(tweet, "legacy")):
+            for name in ("retweeted", "retweeted_by_viewer", "is_retweeted"):
+                value = cls._safe_getattr(source, name)
+                if isinstance(value, bool):
+                    return value
+                if str(value).lower() in ("1", "true", "yes"):
+                    return True
+        return False
+
+    @classmethod
+    def _tweet_status_metadata(cls, tweet: Any) -> Dict[str, Any]:
+        legacy = cls._safe_getattr(tweet, "_legacy") or cls._safe_getattr(tweet, "legacy") or {}
+        user = cls._safe_getattr(tweet, "user") or cls._safe_getattr(tweet, "author")
+        return {
+            "tweet_id": str(cls._safe_getattr(tweet, "id") or cls._safe_getattr(tweet, "rest_id") or ""),
+            "author": cls._safe_getattr(user, "screen_name"),
+            "retweeted": cls._current_user_retweeted(tweet),
+            "retweet_count": cls._safe_getattr(legacy, "retweet_count"),
+        }
+
+    async def _get_tweet_for_status(self, client: Any, tweet_id: str) -> Any:
+        first_error: Exception | None = None
+        try:
+            tweets = await client.get_tweets_by_ids([str(tweet_id)])
+            if tweets:
+                return tweets[0]
+        except Exception as exc:
+            first_error = exc
+        try:
+            return await client.get_tweet_by_id(str(tweet_id))
+        except Exception:
+            if first_error:
+                raise first_error
+            raise
+
+    async def _repost_verified(self, client: Any, tweet_id: str) -> ActionResult:
+        payload: Dict[str, Any] = {"tweet_id": tweet_id}
+        try:
+            before_tweet = await self._get_tweet_for_status(client, tweet_id)
+            before = self._tweet_status_metadata(before_tweet)
+            payload["before"] = before
+            if before.get("retweeted") is True:
+                payload["after"] = before
+                payload["already_reposted"] = True
+                payload["verified"] = True
+                return ActionResult(True, "repost", self.name, False, id=tweet_id, metadata=payload)
+        except Exception as exc:
+            payload["before_error"] = str(exc)
+
+        response = await client.retweet(tweet_id)
+        payload["response_status_code"] = self._safe_getattr(response, "status_code")
+        payload["response_ok"] = self._safe_getattr(response, "is_success")
+        try:
+            response_json = response.json()
+            payload["response_json"] = response_json
+            created = (
+                response_json.get("data", {})
+                .get("create_retweet", {})
+                .get("retweet_results", {})
+                .get("result", {})
+            )
+            payload["created_retweet_id"] = str(created.get("rest_id") or "")
+        except Exception:
+            response_text = str(self._safe_getattr(response, "text", "") or "")
+            if response_text:
+                payload["response_text"] = response_text[:500]
+
+        for _ in range(3):
+            await asyncio.sleep(2)
+            try:
+                after_tweet = await self._get_tweet_for_status(client, tweet_id)
+                after = self._tweet_status_metadata(after_tweet)
+                payload["after"] = after
+                if after.get("retweeted") is True:
+                    payload["verified"] = True
+                    return ActionResult(
+                        True,
+                        "repost",
+                        self.name,
+                        False,
+                        id=str(payload.get("created_retweet_id") or tweet_id),
+                        metadata=payload,
+                    )
+            except Exception as exc:
+                payload["after_error"] = str(exc)
+
+        payload["verified"] = False
+        return ActionResult(False, "repost", self.name, False, error="repost was not verified on X", metadata=payload)
+
     def post(self, text: str) -> ActionResult:
         return self._run("post", {"text": text}, lambda client: client.create_tweet(text=text))
 
@@ -96,7 +196,13 @@ class TwikitAdapter(BaseAdapter):
         return self._run("like", {"tweet_id": tweet_id}, lambda client: client.favorite_tweet(tweet_id))
 
     def repost(self, tweet_id: str) -> ActionResult:
-        return self._run("repost", {"tweet_id": tweet_id}, lambda client: client.retweet(tweet_id))
+        dry = self._dry_result("repost", {"tweet_id": tweet_id})
+        if dry:
+            return dry
+        try:
+            return asyncio.run(self._repost_verified(self._client(), tweet_id))
+        except Exception as exc:
+            return ActionResult(False, "repost", self.name, False, error=str(exc), metadata={"tweet_id": tweet_id})
 
     def quote(self, tweet_id: str, text: str, screen_name: str = "", url: str = "") -> ActionResult:
         attachment_url = url or (f"https://x.com/{screen_name.lstrip('@')}/status/{tweet_id}" if screen_name else f"https://x.com/i/status/{tweet_id}")

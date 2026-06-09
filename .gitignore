@@ -13,6 +13,7 @@ node_modules/
 .wrangler/
 dist/tmp/
 tmp/
+tmp-server-sync/
 secrets/
 cookies/
 sessions/
