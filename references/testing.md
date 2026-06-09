@@ -108,7 +108,7 @@ python scripts/automation_runner.py --kind browse --dry-run --browse-input ./fix
 Expected:
 
 - The result contains `like`, `repost`, and `quote` candidates for the high-signal followed-timeline browse item.
-- With multiple high-signal followed-timeline items, quote candidates appear before bare repost candidates, and default bare repost count stays lower than quote count.
+- With multiple high-signal followed-timeline items, bare repost candidates should be available without quote gating, and the default bare repost count should be higher than the quote count.
 - The unfollowed-author fixture contains a `follow` candidate when the author is high-relevance and not already followed.
 - Each candidate calls `/api/rate/check`.
 - Each candidate writes an audit row.

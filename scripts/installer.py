@@ -32,10 +32,10 @@ DEFAULT_LIMITS = {
     "reply_delay_min_seconds": 45,
     "reply_delay_max_seconds": 600,
     "browse_interval_min_minutes": 20,
-    "likes_per_day": 60,
-    "reposts_per_day": 6,
-    "quotes_per_day": 16,
-    "follows_per_day": 8,
+    "likes_per_day": 15,
+    "reposts_per_day": 35,
+    "quotes_per_day": 10,
+    "follows_per_day": 4,
     "max_replies_per_hour": 12,
 }
 

@@ -15,8 +15,9 @@ from typing import Any, Dict, List
 
 
 MOODS = ["everyday", "excited", "tired", "serious", "sharp", "very-short", "long-form"]
-REPOST_TO_LIKE_RATIO = 0.2
-QUOTE_TO_LIKE_RATIO = 0.7
+BROWSE_REFERENCE_PER_200 = {"like": 15, "repost": 35, "reply": 30, "quote": 10, "follow": 1}
+REPOST_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["repost"] / BROWSE_REFERENCE_PER_200["like"]
+QUOTE_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["quote"] / BROWSE_REFERENCE_PER_200["like"]
 
 
 @dataclass
@@ -175,7 +176,7 @@ def quote_text(item: Dict[str, Any], mood: str) -> str:
 def repost_limit_for_likes(max_likes: int) -> int:
     if max_likes <= 0:
         return 0
-    return max(1, round(max_likes * REPOST_TO_LIKE_RATIO)) if max_likes >= 3 else 0
+    return max(1, round(max_likes * REPOST_TO_LIKE_RATIO)) if max_likes >= 2 else 1
 
 
 def quote_limit_for_likes(max_likes: int) -> int:
@@ -253,30 +254,29 @@ def generate_browse_candidates(
                 )
             )
             counts["like"] += 1
+        if (
+            source_rank >= 90
+            and persona_score >= 16
+            and counts["repost"] < effective_max_reposts
+        ):
+            candidates.append(
+                Candidate(
+                    "repost",
+                    f"browse selected high-signal item worth quiet boosting; source_rank={source_rank}; persona_score={persona_score}; mood={mood}; reference_per_200={BROWSE_REFERENCE_PER_200}",
+                    **common,
+                )
+            )
+            counts["repost"] += 1
         if (persona_score >= 16 or (source_rank >= 100 and persona_score >= 8)) and counts["quote"] < effective_max_quotes:
             candidates.append(
                 Candidate(
                     "quote",
-                    f"browse selected item worth persona quote; source_rank={source_rank}; persona_score={persona_score}; mood={mood}",
+                    f"browse selected item worth persona quote when there is something to add; source_rank={source_rank}; persona_score={persona_score}; mood={mood}; reference_per_200={BROWSE_REFERENCE_PER_200}",
                     text=quote_text(item, mood),
                     **common,
                 )
             )
             counts["quote"] += 1
-        if (
-            source_rank >= 90
-            and persona_score >= 16
-            and counts["repost"] < effective_max_reposts
-            and counts["repost"] < counts["quote"]
-        ):
-            candidates.append(
-                Candidate(
-                    "repost",
-                    f"browse selected high-signal item worth quiet boosting after quote coverage; source_rank={source_rank}; persona_score={persona_score}; mood={mood}",
-                    **common,
-                )
-            )
-            counts["repost"] += 1
         follow_target = author_follow_target(item)
         should_follow = (
             follow_target
@@ -405,13 +405,13 @@ def main() -> int:
         "--max-browse-reposts",
         type=int,
         default=None,
-        help="Defaults to a small quote-gated fraction of --max-browse-likes.",
+        help="Defaults from the browse reference mix: about 35 reposts per 15 likes.",
     )
     parser.add_argument(
         "--max-browse-quotes",
         type=int,
         default=None,
-        help="Defaults to about 0.7x --max-browse-likes, making quotes the main boost action.",
+        help="Defaults from the browse reference mix: about 10 quotes per 15 likes.",
     )
     parser.add_argument("--max-browse-follows", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")

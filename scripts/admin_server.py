@@ -37,10 +37,10 @@ DEFAULT_LIMITS = {
     "reply_delay_min_seconds": 45,
     "reply_delay_max_seconds": 600,
     "browse_interval_min_minutes": 20,
-    "likes_per_day": 60,
-    "reposts_per_day": 6,
-    "quotes_per_day": 16,
-    "follows_per_day": 8,
+    "likes_per_day": 15,
+    "reposts_per_day": 35,
+    "quotes_per_day": 10,
+    "follows_per_day": 4,
     "max_replies_per_hour": 12,
 }
 
@@ -254,8 +254,15 @@ def init_db() -> None:
                 (key, json.dumps(value), now),
             )
         limits = read_config(conn)
-        if int(limits.get("likes_per_day", 60)) == 60 and int(limits.get("reposts_per_day", 30)) == 12:
-            set_config(conn, "reposts_per_day", 30)
+        if (
+            int(limits.get("likes_per_day", 15)) == 60
+            and int(limits.get("reposts_per_day", 35)) in {6, 12, 30}
+            and int(limits.get("quotes_per_day", 10)) == 16
+        ):
+            set_config(conn, "likes_per_day", 15)
+            set_config(conn, "reposts_per_day", 35)
+            set_config(conn, "quotes_per_day", 10)
+            set_config(conn, "follows_per_day", 4)
 
 
 def require_admin(authorization: str = Header(default="")) -> None:
