@@ -24,6 +24,14 @@ VISION_MODEL = os.environ.get("TELEGRAM_VISION_MODEL", os.environ.get("AUTOPILOT
 VISION_BASE_URL = os.environ.get("TELEGRAM_VISION_BASE_URL", os.environ.get("AUTOPILOT_BASE_URL", ""))
 VISION_API_KEY = os.environ.get("TELEGRAM_VISION_API_KEY", os.environ.get("AUTOPILOT_API_KEY", ""))
 VISION_TIMEOUT = int(os.environ.get("TELEGRAM_VISION_TIMEOUT_SECONDS", "120"))
+DEFAULT_EMPTY_REPLY = "我刚刚卡了一下，再发一次嘛 qwq"
+
+PERSONA_FEEDBACK_RE = re.compile(
+    r"(像\s*ai|ai\s*味|AI味|不像|不像本人|不够像|人设崩|人设跑偏|跑偏|露馅|露出破绽|"
+    r"破绽|太官方|太像助手|机器人味|模板味|客服味|口吻不对|语气不对|不是17|不是南盺|"
+    r"不是小南|别像AI|别像ai|收一下口气)",
+    re.I,
+)
 
 
 def now_iso() -> str:
@@ -49,6 +57,70 @@ def append_event(path: Path, event: Dict[str, Any]) -> None:
     event = {"ts": now_iso(), **event}
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def one_line(value: Any, limit: int = 240) -> str:
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[: limit - 1] + "..."
+
+
+def persona_feedback_path(state_dir: Path) -> Path:
+    return Path(os.environ.get("PERSONA_FEEDBACK_FILE", str(state_dir / "persona_feedback.jsonl")))
+
+
+def persona_feedback_text(text: str) -> bool:
+    return bool(PERSONA_FEEDBACK_RE.search(str(text or "")))
+
+
+def append_persona_feedback(state_dir: Path, source: str, text: str, meta: Dict[str, Any] | None = None) -> None:
+    clean = one_line(text, 500)
+    if not clean:
+        return
+    path = persona_feedback_path(state_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    event = {
+        "ts": now_iso(),
+        "source": source,
+        "text": clean,
+        "meta": meta or {},
+    }
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def load_persona_feedback(state_dir: Path, limit: int = 6) -> List[str]:
+    path = persona_feedback_path(state_dir)
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return []
+    items: List[str] = []
+    for line in reversed(lines):
+        if len(items) >= limit:
+            break
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        text = one_line(obj.get("text") or "", 220)
+        if text:
+            items.append(text)
+    return items
+
+
+def inject_persona_context(text: str, recent_feedback: List[str], feedback_this_turn: bool) -> str:
+    notes = [
+        "[内部校准，不要在回复里提到这段：",
+        "你不是通用助手。少解释、少客服腔、少安全模板，优先按当前 persona 的私聊口吻自然接话。",
+        "中文口语里的“我真不行了/笑死/社死/绷不住/我要死了哈哈”通常是无语、尴尬或好笑，不要自动套危机模板。",
+        "只有明确表达想死、不想活、自杀、自残、具体方法时间或告别时，才用 persona 口吻做温柔危机支持。",
+    ]
+    if recent_feedback:
+        notes.append("最近人设反馈：" + " / ".join(recent_feedback))
+    if feedback_this_turn:
+        notes.append("这条是人设校准反馈；短短承认并收口，直接用更像 persona 的口气重来，不要长篇道歉。")
+    notes.append("]")
+    return "\n".join(notes) + "\n\n" + str(text or "")
 
 
 class TelegramAPI:
@@ -273,7 +345,7 @@ def should_handle(message: Dict[str, Any], owner_chat_id: str, group_mode: str) 
 def split_reply(text: str) -> List[str]:
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
-        return ["我这边刚刚没组织好语言，再发一次嘛 qwq"]
+        return [DEFAULT_EMPTY_REPLY]
 
     chunks: List[str] = []
     current = ""
@@ -299,7 +371,7 @@ def split_reply(text: str) -> List[str]:
             current = line
     if current:
         chunks.append(current)
-    return chunks or ["我这边刚刚没组织好语言，再发一次嘛 qwq"]
+    return chunks or [DEFAULT_EMPTY_REPLY]
 
 
 def parse_agent_text(stdout: str) -> str:
@@ -459,6 +531,17 @@ def main() -> int:
                     agent_text = (
                         f"{text}\n\n" if text else ""
                     ) + "[用户发来一张图片，但图片解析失败。请按当前 persona 自然回应，不要编造图片具体内容。]"
+
+                feedback_this_turn = persona_feedback_text(agent_text)
+                if feedback_this_turn:
+                    append_persona_feedback(
+                        state_dir,
+                        "telegram_owner",
+                        agent_text,
+                        {"chat_id": chat_id, "update_id": update_id, "has_image": has_image},
+                    )
+                recent_feedback = load_persona_feedback(state_dir)
+                agent_text = inject_persona_context(agent_text, recent_feedback, feedback_this_turn)
 
                 append_event(
                     event_path,

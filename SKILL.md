@@ -62,6 +62,8 @@ This skill turns desktop Codex or Claude Code into the deployment and maintenanc
 - Automation: enabled but limited; 5 original posts/day; shadow mode available and recommended for new personas.
 - Memory: official OpenClaw memory plus local SQLite FTS; no cloud memory by default.
 - Persona variation: sample `mood_state` for every generated action; variation changes rhythm and temperature, not identity or core values.
+- Persona feedback: runtime agents store owner/public feedback such as "AI 味", "不像本人", or "口吻不对" in `persona_feedback.jsonl` and inject only a compact recent digest into replies, proactive browsing, quotes, and original-post generation.
+- Crisis nuance: casual Chinese exaggeration such as "我真不行了", "笑死", "社死", "绷不住", or "我要死了哈哈" is not self-harm by itself; explicit intent, method/time details, goodbye notes, or "不想活/想死/撑不下去" still trigger persona-faithful crisis support.
 
 ## Reference Loading
 

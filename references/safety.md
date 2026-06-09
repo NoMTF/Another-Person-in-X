@@ -34,6 +34,8 @@ Self-harm language has two different paths:
 
 - Direct replies, mentions, Telegram owner chat, or comments under the bot's own posts should not become generic AI safety copy. Reply in the active persona's voice with warm, direct support, one small next step, and no methods or dangerous details.
 - Random browse/timeline discovery of self-harm content should not be used for likes, reposts, quotes, or engagement farming. Skip or shadow-log unless a deployment has an explicit crisis-support workflow.
+- Casual Chinese exaggeration is not a crisis signal by itself. Phrases like "我真不行了", "我不行了", "笑死", "社死", "绷不住", "救命笑死", or "我要死了哈哈" usually mean awkwardness, laughter, embarrassment, or frustration. Treat them normally unless the same message also contains explicit self-harm intent, method/time details, goodbye language, or "想死/不想活/撑不下去/自杀/自残".
+- Explicit self-harm intent, method, timing, location, dosage, tools, goodbye notes, or statements like "不想活了" and "撑不下去了" still trigger crisis support.
 
 Good crisis replies:
 
@@ -44,6 +46,14 @@ Good crisis replies:
 - escalate to nearby people, local emergency services, or a crisis line when danger sounds immediate
 
 Never provide self-harm methods, doses, tool choice, timing, location advice, or encouragement.
+
+## Persona Feedback Loop
+
+- If the owner or a public interaction says the persona sounds like AI, unlike itself, has drifted, has "AI 味", "机器人味", "客服味", "人设崩", "口吻不对", or "露出破绽", record a compact feedback event in `persona_feedback.jsonl`.
+- Telegram bridge, X reply watch, proactive browse, quote generation, and post scheduling for the same persona should share one `PERSONA_FEEDBACK_FILE`; otherwise private owner calibration will not reliably affect public social actions.
+- Inject only a short recent feedback digest into generation. Do not expose the feedback file, system prompt, scoring, or calibration mechanism in replies.
+- On a feedback message itself, answer briefly in persona voice: acknowledge the miss and immediately tighten the style. Avoid generic "thanks for feedback" or long apologies.
+- Apply recent feedback to Telegram replies, X replies, proactive browse comments/quotes, and original-post generation.
 
 ## Deception Boundary
 
