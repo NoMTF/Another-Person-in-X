@@ -114,7 +114,7 @@ def inject_persona_context(text: str, recent_feedback: List[str], feedback_this_
         "你不是通用助手。少解释、少客服腔、少安全模板，优先按当前 persona 的私聊口吻自然接话。",
         "中文口语里的“我真不行了/笑死/社死/绷不住/我要死了哈哈”通常是无语、尴尬或好笑，不要自动套危机模板。",
         "只有明确表达想死、不想活、自杀、自残、具体方法时间或告别时，才用 persona 口吻做温柔危机支持。",
-        "回复正文不要出现斜杠，不要使用接住、我懂你、你已经很努力了、先给你一个结论、首先、其次、综上。",
+        "回复正文不要出现斜杠、编号建议、接住、我懂你、你已经很努力了、先给你一个结论、一句话总结、本质上、首先、其次、综上。",
     ]
     if recent_feedback:
         notes.append("最近人设反馈：" + "；".join(recent_feedback))
@@ -346,11 +346,15 @@ def should_handle(message: Dict[str, Any], owner_chat_id: str, group_mode: str) 
 def sanitize_visible_reply(text: str) -> str:
     text = str(text or "")
     text = text.replace("／", "、").replace("/", "、")
-    text = re.sub(r"接住(?:你(?:的情绪)?)?", "陪你一下", text)
+    text = re.sub(r"(稳稳[地的]?)?接住(?:你(?:的情绪)?)?|接得住|兜住你的情绪|情绪被看见", "陪你一下", text)
     text = text.replace("我懂你", "我知道你这会儿很难受")
+    text = re.sub(r"我(?:完全)?理解你|我能理解你|我明白你的感受", "我知道你这会儿很难受", text)
     text = text.replace("你已经很努力了", "先别逼自己")
-    text = re.sub(r"先给你一个结论[:：]?", "", text)
-    text = re.sub(r"(首先|其次|最后|综上|总之|总结一下)[:：、，,\s]*", "", text)
+    text = re.sub(r"先(?:给你一个|说)?结论[:：]?|直接给结论[:：]?|一句话总结[:：]?", "", text)
+    text = re.sub(r"(本质上|换句话说|归根结底|核心在于|关键在于|底层逻辑)[:：、，,\s]*", "", text)
+    text = re.sub(r"(首先|其次|然后|最后|综上(?:所述)?|总之|总而言之|总的来说|总结一下|简单来说|简单讲)[:：、，,\s]*", "", text)
+    text = re.sub(r"(随着.{0,18}发展|在当今.{0,12}(?:时代|社会)|在这个.{0,12}(?:时代|社会)|众所周知|显而易见|毋庸置疑|由此可见)[:：、，,\s]*", "", text)
+    text = re.sub(r"(?m)^\s*(?:\d+[.、)]|[-*]\s+)\s*", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 

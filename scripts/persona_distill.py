@@ -430,7 +430,8 @@ Persona: {name}
 - Mood may change length, pacing, and temperature; it must not change core values or identity boundaries.
 - Avoid polished corporate transitions, disclaimers, and listy AI structure unless the persona naturally uses them.
 - User-facing text should not contain a slash. Use commas, pauses, or separate short bubbles instead.
-- Avoid generic helper phrases such as "接住", "我懂你", "你已经很努力了", "先给你一个结论", "首先", "其次", and "综上" unless they appear as a direct source quote and are intentionally being discussed.
+- Avoid generic helper phrases such as "接住", "稳稳接住", "我懂你", "你已经很努力了", "先给你一个结论", "一句话总结", "本质上", "首先", "其次", and "综上" unless they appear as a direct source quote and are intentionally being discussed.
+- Avoid essay openings and symmetric argument frames such as "随着...发展", "在当今社会", "众所周知", "不仅仅是...更是...", "一方面...另一方面...", and numbered or bulleted advice.
 - Original posts should not become empty atmosphere. Keep some short mood fragments, but mix in concrete questions and small opinions about objects, activities, tools, weather, media, timeline behavior, or daily scenes.
 - Natural questions should be specific and answerable, not generic engagement bait. A good pattern is "有没有那种..." or "这个...是不是..." when it fits the persona.
 - Treat near-duplicates as repetition even when only particles, emoji, line breaks, or catchphrases differ. Identity labels or broad mood words do not count as concrete details by themselves.
@@ -468,7 +469,7 @@ Before sending any social action:
 4. If the incoming message clearly says the person wants to die, self-harm, disappear, cannot keep living, gives method/time details, or says goodbye, switch to `crisis_support.md` instead of a generic safety template.
 5. Do not treat casual Chinese exaggeration such as "我真不行了", "笑死", "社死", "绷不住", or "我要死了哈哈" as self-harm by itself.
 6. Run `check_reply.py`.
-7. Reject text that contains a slash, "接住", "我懂你", "你已经很努力了", "先给你一个结论", "首先", "其次", or "综上" unless it is discussing the phrase itself.
+7. Reject text that contains a slash, numbered bullets, "接住", "稳稳接住", "我懂你", "你已经很努力了", "先给你一个结论", "一句话总结", "本质上", "随着...发展", "在当今社会", "首先", "其次", or "综上" unless it is discussing the phrase itself.
 8. If a user says the persona sounds like AI, unlike itself, has drifted, or exposed a flaw, record the feedback and make the next reply/post less generic and more grounded.
 9. Log reason, risk, persona anchors, final text, and send/shadow status to the admin audit API.
 10. Respect `pause_all`, `read_only`, and `shadow_mode`.
@@ -624,12 +625,15 @@ GENERIC_AI_PATTERNS = [
 ]
 
 GPTISH_PATTERNS = [
-    re.compile(r"接住|安全接住|自然接住|接住你(?:的情绪)?"),
-    re.compile(r"我懂你|我理解你|你已经很努力了|你已经撑太久了|你不是一个人|我会一直在这里"),
-    re.compile(r"先给你一个结论|粗暴但真实|本质上|换句话说|归根结底|核心在于|关键在于|底层逻辑"),
-    re.compile(r"首先|其次|然后|最后|综上|总之|总结一下|值得注意的是|不可否认|与此同时"),
-    re.compile(r"建议你|你可以尝试|请记住|希望你能|提供帮助|以下是一些资源|寻求专业帮助"),
+    re.compile(r"接住|稳稳[地的]?接住|安全接住|自然接住|接住你(?:的情绪)?|接得住|兜住你的情绪|情绪被看见"),
+    re.compile(r"我懂你|我理解你|我完全理解|我能理解|我明白你的感受|你的感受(?:是)?合理|你已经很努力了|你已经撑太久了|你不是一个人|我会一直在这里"),
+    re.compile(r"先给你一个结论|先说结论|直接给结论|一句话总结|粗暴但真实|本质上|换句话说|归根结底|核心在于|关键在于|底层逻辑"),
+    re.compile(r"首先|其次|然后|最后|综上|综上所述|总之|总而言之|总的来说|总结一下|简单来说|简单讲|值得注意的是|不可否认|与此同时"),
+    re.compile(r"随着.{0,18}发展|在当今.{0,12}(时代|社会)|在这个.{0,12}(时代|社会)|众所周知|显而易见|毋庸置疑|由此可见|这说明"),
+    re.compile(r"建议你|你可以尝试|请记住|希望你能|提供帮助|以下是一些资源|寻求专业帮助|如果你愿意|随时(?:都)?可以(?:和我)?聊"),
     re.compile(r"不是.{1,24}而是"),
+    re.compile(r"不仅仅是.{1,32}更是|一方面.{1,80}另一方面|既.{1,24}又"),
+    re.compile(r"(?m)^\\s*(?:\\d+[.、)]|[-*]\\s+)"),
 ]
 
 CRISIS_SUPPORT_PATTERNS = [
