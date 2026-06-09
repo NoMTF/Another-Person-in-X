@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import html
 import json
 import mimetypes
 import os
@@ -24,12 +25,20 @@ VISION_MODEL = os.environ.get("TELEGRAM_VISION_MODEL", os.environ.get("AUTOPILOT
 VISION_BASE_URL = os.environ.get("TELEGRAM_VISION_BASE_URL", os.environ.get("AUTOPILOT_BASE_URL", ""))
 VISION_API_KEY = os.environ.get("TELEGRAM_VISION_API_KEY", os.environ.get("AUTOPILOT_API_KEY", ""))
 VISION_TIMEOUT = int(os.environ.get("TELEGRAM_VISION_TIMEOUT_SECONDS", "120"))
+FACT_SEARCH_ENABLED = os.environ.get("FACT_SEARCH_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+FACT_SEARCH_TIMEOUT_SECONDS = int(os.environ.get("FACT_SEARCH_TIMEOUT_SECONDS", "8"))
 DEFAULT_EMPTY_REPLY = "我刚刚卡了一下，再发一次嘛 qwq"
 
 PERSONA_FEEDBACK_RE = re.compile(
     r"(像\s*ai|ai\s*味|AI味|不像|不像本人|不够像|人设崩|人设跑偏|跑偏|露馅|露出破绽|"
     r"破绽|太官方|太像助手|机器人味|模板味|客服味|口吻不对|语气不对|不是17|不是南盺|"
     r"不是小南|别像AI|别像ai|收一下口气)",
+    re.I,
+)
+
+FACT_OR_SLANG_RE = re.compile(
+    r"(高考|中考|考研|考试|今天|明天|昨天|今年|最新|官方|政策|新闻|比赛|赛程|天气|台风|地震|节日|纪念日|"
+    r"23|114514|1919810|抽象|典|孝|绷|蚌埠住|大的|小登|盒武器|开盒|查重|缝合|赢麻)",
     re.I,
 )
 
@@ -62,6 +71,53 @@ def append_event(path: Path, event: Dict[str, Any]) -> None:
 def one_line(value: Any, limit: int = 240) -> str:
     text = " ".join(str(value or "").split())
     return text if len(text) <= limit else text[: limit - 1] + "..."
+
+
+def fact_or_slang_hint(text: str) -> str:
+    if not FACT_OR_SLANG_RE.search(str(text or "")):
+        return ""
+    return (
+        "这条包含事实敏感信息或中文网络梗。不要不懂装懂，不要硬解释梗，"
+        "不要给日期、考试第几天、新闻政策等断言；没有检索证据就少说或说不确定。"
+    )
+
+
+def web_search_context(text: str) -> str:
+    haystack = one_line(text, 360)
+    if not FACT_SEARCH_ENABLED or not FACT_OR_SLANG_RE.search(haystack):
+        return ""
+    if re.search(r"高考|中考|考研|考试|今天|明天|昨天|今年|最新|官方|政策|新闻|比赛|赛程|天气|台风|地震|节日|纪念日", haystack, re.I):
+        query = haystack + " 官方 最新"
+    else:
+        query = haystack + " 中文互联网 语境"
+    try:
+        url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
+        req = urllib.request.Request(url, headers={"user-agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=FACT_SEARCH_TIMEOUT_SECONDS) as resp:
+            raw = resp.read(120000).decode("utf-8", errors="ignore")
+    except Exception as exc:
+        return "搜索失败，不能对事实或梗义做断言：" + one_line(exc, 120)
+    titles = [
+        re.sub(r"<[^>]+>", "", html.unescape(match)).strip()
+        for match in re.findall(r'class="result__a"[^>]*>(.*?)</a>', raw, re.S)
+    ]
+    snippets = [
+        re.sub(r"<[^>]+>", "", html.unescape(match)).strip()
+        for match in re.findall(r'class="result__snippet"[^>]*>(.*?)</a>|class="result__snippet"[^>]*>(.*?)</div>', raw, re.S)
+    ]
+    flat_snippets: List[str] = []
+    for item in snippets:
+        if isinstance(item, tuple):
+            flat_snippets.extend(part for part in item if part)
+        elif item:
+            flat_snippets.append(item)
+    rows: List[str] = []
+    for idx, title in enumerate(titles[:3]):
+        snippet = flat_snippets[idx] if idx < len(flat_snippets) else ""
+        rows.append(one_line(f"{title} {snippet}", 260))
+    if not rows:
+        return "没有搜到可靠摘要，不能对事实或梗义做断言。"
+    return "搜索摘要，仅用于避免不懂装懂：" + "；".join(rows)
 
 
 def persona_feedback_path(state_dir: Path) -> Path:
@@ -108,7 +164,13 @@ def load_persona_feedback(state_dir: Path, limit: int = 6) -> List[str]:
     return items
 
 
-def inject_persona_context(text: str, recent_feedback: List[str], feedback_this_turn: bool) -> str:
+def inject_persona_context(
+    text: str,
+    recent_feedback: List[str],
+    feedback_this_turn: bool,
+    context_hint: str = "",
+    verified_context: str = "",
+) -> str:
     notes = [
         "[内部校准，不要在回复里提到这段：",
         "你不是通用助手。少解释、少客服腔、少安全模板，优先按当前 persona 的私聊口吻自然接话。",
@@ -116,6 +178,11 @@ def inject_persona_context(text: str, recent_feedback: List[str], feedback_this_
         "只有明确表达想死、不想活、自杀、自残、具体方法时间或告别时，才用 persona 口吻做温柔危机支持。",
         "回复正文不要出现斜杠、编号建议、接住、我懂你、你已经很努力了、先给你一个结论、一句话总结、本质上、首先、其次、综上。",
     ]
+    if context_hint:
+        notes.append(context_hint)
+        notes.append("事实或梗义只可使用 verified_context；如果没有可靠摘要，就不要断言，也不要科普式解释。")
+    if verified_context:
+        notes.append("verified_context：" + one_line(verified_context, 900))
     if recent_feedback:
         notes.append("最近人设反馈：" + "；".join(recent_feedback))
     if feedback_this_turn:
@@ -558,7 +625,15 @@ def main() -> int:
                         {"chat_id": chat_id, "update_id": update_id, "has_image": has_image},
                     )
                 recent_feedback = load_persona_feedback(state_dir)
-                agent_text = inject_persona_context(agent_text, recent_feedback, feedback_this_turn)
+                context_hint = fact_or_slang_hint(agent_text)
+                verified_context = web_search_context(agent_text)
+                agent_text = inject_persona_context(
+                    agent_text,
+                    recent_feedback,
+                    feedback_this_turn,
+                    context_hint,
+                    verified_context,
+                )
 
                 append_event(
                     event_path,
@@ -568,6 +643,8 @@ def main() -> int:
                         "chat_id": chat_id,
                         "text_len": len(text),
                         "image": image_meta,
+                        "context_hint": bool(context_hint),
+                        "verified_context": bool(verified_context),
                     },
                 )
                 api.send_chat_action(chat_id)

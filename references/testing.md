@@ -168,3 +168,6 @@ Expected:
 - Reject near-duplicate original posts even when only particles, emoji, line breaks, or catchphrases differ.
 - Reject generated replies or posts containing a slash, numbered advice, "接住", "稳稳接住", "我懂你", "你已经很努力了", "先给你一个结论", "一句话总结", "本质上", "随着...发展", "在当今社会", "首先", "其次", or "综上".
 - Confirm casual hyperbole such as "我真不行了" passes as normal banter when the input has no explicit self-harm intent, method, time, or goodbye signal.
+- Reject unsupported factual claims such as "高考第一天" when the input did not provide that fact and no verified search result was injected.
+- Reject explanation-style replies for ambiguous Chinese slang or short-number shorthand such as "23" unless verified context supports the explanation.
+- Compare a sample of recent live posts against retrieved source anchors. If the live text reads like a generic warm account rather than the original source rhythm, tighten prompts or regenerate the persona digest.
