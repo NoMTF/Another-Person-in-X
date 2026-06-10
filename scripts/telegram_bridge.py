@@ -28,7 +28,9 @@ VISION_TIMEOUT = int(os.environ.get("TELEGRAM_VISION_TIMEOUT_SECONDS", "120"))
 FACT_SEARCH_ENABLED = os.environ.get("FACT_SEARCH_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 FACT_SEARCH_TIMEOUT_SECONDS = int(os.environ.get("FACT_SEARCH_TIMEOUT_SECONDS", "8"))
 DEFAULT_EMPTY_REPLY = "我刚刚卡了一下，再发一次嘛 qwq"
+X_TOOLS_API = os.environ.get("X_TOOLS_API", "").strip().rstrip("/")
 ALL_COMMAND_RE = re.compile(r"^/all(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
+REPORT_COMMAND_RE = re.compile(r"^/(?:report|举报)(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
 BROADCAST_REPORT_RE = re.compile(r"(^|\s)/(?:report|举报)\b|举报|report\s+(?:@|https?://|\d)", re.I)
 BROADCAST_SECRET_RE = re.compile(
     r"(auth[_-]?token|ct0|api[_-]?key|secret|bearer\s+|sk-[A-Za-z0-9]|password|密码|密钥|token\s*[:=])",
@@ -434,6 +436,119 @@ def parse_all_command(text: str) -> tuple[bool, str, str]:
     return True, body, ""
 
 
+def parse_report_command(text: str) -> tuple[bool, Dict[str, Any], str]:
+    match = REPORT_COMMAND_RE.match(str(text or "").strip())
+    if not match:
+        return False, {}, ""
+    body = (match.group(1) or "").strip()
+    if not body:
+        return True, {}, "用法：/report @user spam dry-run，live 需要 confirm=REPORT"
+    parts = body.split()
+    target = parts[0].strip()
+    reason = "spam"
+    dry_run = True
+    confirm = ""
+    for part in parts[1:]:
+        item = part.strip()
+        low = item.lower()
+        if low in {"live", "--live", "dry_run=false", "dry-run=false"}:
+            dry_run = False
+        elif low in {"dry", "dry-run", "dry_run=true", "dry-run=true"}:
+            dry_run = True
+        elif item.startswith("reason="):
+            reason = item.split("=", 1)[1].strip() or reason
+        elif item.startswith("confirm="):
+            confirm = item.split("=", 1)[1].strip()
+        elif low in {"spam", "impersonation", "abuse", "harassment", "privacy", "self_harm", "other"}:
+            reason = low
+    payload: Dict[str, Any] = {"reason": reason, "dry_run": dry_run, "confirm": confirm}
+    status_match = re.search(r"(?:x|twitter)\.com/[^/\s]+/status/(\d+)", target, re.I)
+    if status_match:
+        payload["tweet_id"] = status_match.group(1)
+    elif re.fullmatch(r"\d{8,}", target):
+        payload["user_id"] = target
+    else:
+        screen = re.sub(r"^https?://(?:www\.)?(?:x|twitter)\.com/", "", target, flags=re.I)
+        screen = screen.split("/", 1)[0].strip().lstrip("@")
+        if not re.fullmatch(r"[A-Za-z0-9_]{1,20}", screen):
+            return True, {}, "举报目标格式不对，用 @handle 或 X 帖子链接。"
+        payload["screen_name"] = screen
+    if not dry_run and confirm != "REPORT":
+        return True, {}, "live 举报必须带 confirm=REPORT。"
+    return True, payload, ""
+
+
+def x_api_for_profile(profile: str) -> str:
+    if X_TOOLS_API:
+        return X_TOOLS_API
+    lowered = str(profile or "").lower()
+    if "nanxin" in lowered:
+        return "http://127.0.0.1:8788"
+    return "http://127.0.0.1:8787"
+
+
+def post_json(url: str, payload: Dict[str, Any], timeout: int = 90) -> Dict[str, Any]:
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"content-type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+            return json.loads(raw) if raw else {}
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {exc.code}: {one_line(detail, 500)}") from exc
+
+
+def compact_report_result(result: Dict[str, Any]) -> str:
+    target = result.get("target") if isinstance(result.get("target"), dict) else {}
+    screen = target.get("screen_name") or result.get("target_url") or "target"
+    return (
+        f"report {result.get('reason', 'spam')} @{screen}: "
+        f"ok={bool(result.get('ok'))} sent={bool(result.get('sent'))} "
+        f"dry_run={bool(result.get('dry_run'))} live_enabled={bool(result.get('live_enabled'))}"
+    )
+
+
+def handle_report_command(
+    api: TelegramAPI,
+    event_path: Path,
+    message: Dict[str, Any],
+    profile: str,
+    owner_chat_id: str,
+) -> bool:
+    text = extract_text(message)
+    is_report, payload, error = parse_report_command(text)
+    if not is_report:
+        return False
+    chat_id = str((message.get("chat") or {}).get("id", ""))
+    message_id = message.get("message_id")
+    if owner_chat_id and chat_id != owner_chat_id:
+        append_event(event_path, {"event": "REPORT_REJECTED", "reason": "not-owner", "chat_id": chat_id})
+        return True
+    if error:
+        api.send_message(chat_id, error, message_id)
+        append_event(event_path, {"event": "REPORT_REJECTED", "reason": error[:120], "chat_id": chat_id})
+        return True
+    try:
+        result = post_json(x_api_for_profile(profile) + "/report", payload)
+        api.send_message(chat_id, compact_report_result(result), message_id)
+        append_event(
+            event_path,
+            {
+                "event": "REPORT_COMMAND",
+                "profile": profile,
+                "dry_run": payload.get("dry_run") is not False,
+                "reason": payload.get("reason"),
+                "ok": bool(result.get("ok")),
+                "sent": bool(result.get("sent")),
+            },
+        )
+    except Exception as exc:
+        api.send_message(chat_id, f"report 没跑成：{one_line(exc, 220)}", message_id)
+        append_event(event_path, {"event": "REPORT_ERROR", "profile": profile, "error": str(exc)[:400]})
+    return True
+
+
 def load_env_value(path: Path, key: str) -> str:
     try:
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -769,6 +884,15 @@ def main() -> int:
                             "has_image": has_image,
                         },
                     )
+                    continue
+
+                if text and handle_report_command(
+                    api,
+                    event_path,
+                    message,
+                    args.profile,
+                    args.owner_chat_id,
+                ):
                     continue
 
                 if text and handle_all_command(
