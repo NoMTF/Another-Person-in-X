@@ -638,20 +638,73 @@ def post_json(url: str, payload: Dict[str, Any], timeout: int = 90) -> Dict[str,
         raise RuntimeError(f"HTTP {exc.code}: {one_line(detail, 500)}") from exc
 
 
+REPORT_STATUS_LABELS = {
+    "dry_run": "预览完成，未提交",
+    "queued": "已入队，等待执行",
+    "running": "正在执行",
+    "needs_owner_confirm": "需要确认",
+    "needs_details": "需要补充说明",
+    "needs_manual": "需要手动处理",
+    "succeeded": "已提交",
+    "failed": "失败",
+    "duplicate_skipped": "24 小时内重复，已跳过",
+    "rate_limited": "被限流，稍后重试",
+}
+
+REPORT_ACTION_LABELS = {
+    "post": "帖子",
+    "user": "用户",
+}
+
+
+def report_status_label(status: Any) -> str:
+    key = str(status or "").strip()
+    return REPORT_STATUS_LABELS.get(key, key or "未知状态")
+
+
+def report_error_label(error: Any) -> str:
+    text = one_line(error, 220)
+    if not text:
+        return ""
+    lowered = text.lower()
+    if "challenge page detected" in lowered:
+        return "X 弹出验证/挑战页，自动流程已停止，需要手动处理。"
+    if "live report disabled" in lowered:
+        return "真实举报开关未开启。"
+    if "rate" in lowered or "429" in lowered:
+        return "X 限流了，稍后再试。"
+    return text
+
+
 def compact_report_result(result: Dict[str, Any]) -> str:
     target = result.get("target") if isinstance(result.get("target"), dict) else {}
     screen = target.get("screen_name") or result.get("screen_name") or result.get("normalized_url") or result.get("target_url") or "target"
     status = result.get("status") or ("sent" if result.get("sent") else "unknown")
-    type_text = result.get("resolved_type") or result.get("reason") or result.get("type_code") or "report"
-    task = f" task={result.get('task_id')}" if result.get("task_id") else ""
-    text = (
-        f"report {type_text} {screen}: "
-        f"status={status} ok={bool(result.get('ok'))} sent={bool(result.get('sent'))}"
-        f"{task}"
+    type_text = result.get("label") or result.get("resolved_type") or result.get("reason") or result.get("type_code") or "举报"
+    actions = result.get("actions") if isinstance(result.get("actions"), list) else []
+    action_text = "、".join(
+        REPORT_ACTION_LABELS.get(str(item.get("action_kind") or ""), str(item.get("action_kind") or "目标"))
+        for item in actions
+        if isinstance(item, dict)
     )
+    rows = [
+        f"举报类型：{type_text}",
+        f"目标：@{screen}" if re.fullmatch(r"[A-Za-z0-9_]{1,20}", str(screen)) else f"目标：{screen}",
+        f"状态：{report_status_label(status)}",
+    ]
+    if action_text:
+        rows.append(f"范围：{action_text}")
+    if result.get("task_id"):
+        rows.append(f"任务：{result.get('task_id')}")
+    if result.get("dry_run"):
+        rows.append("这是预览，没有真的提交。")
+    elif status == "queued":
+        rows.append("已交给队列执行，遇到验证页会停在“需要手动处理”。")
+    elif status == "needs_manual":
+        rows.append("X 要求验证或手动确认，自动流程没有继续点。")
     if result.get("error"):
-        text += f" error={one_line(result.get('error'), 180)}"
-    return text
+        rows.append("原因：" + report_error_label(result.get("error")))
+    return "\n".join(rows)
 
 
 def handle_report_command(
