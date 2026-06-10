@@ -37,6 +37,13 @@ BROADCAST_SECRET_RE = re.compile(
     r"(auth[_-]?token|ct0|api[_-]?key|secret|bearer\s+|sk-[A-Za-z0-9]|password|密码|密钥|token\s*[:=])",
     re.I,
 )
+REPORT_URL_RE = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/[^\s，。；、]+", re.I)
+REPORT_BRACED_TYPE_RE = re.compile(r"\{(\d{1,3})\}")
+REPORT_EXPLICIT_TYPE_RE = re.compile(r"(?:^|[\s，。；、])(?:type(?:_code)?|reason|类型)\s*[=:：]?\s*(\d{1,3})\b", re.I)
+REPORT_LEADING_TYPE_RE = re.compile(r"^\s*(\d{1,3})[\s，。；、]+")
+REPORT_INTENT_RE = re.compile(r"\breport\b|举报", re.I)
+REPORT_FLAG_RE = re.compile(r"\b(live|--live|dry|dry-run|dry_run=true|dry-run=true|dry_run=false|dry-run=false|force|--force|force=true)\b", re.I)
+REPORT_KV_RE = re.compile(r"\b(confirm=REPORT|scope=[^\s，。；、]+|details=[^\s，。；、]+)\b", re.I)
 
 try:
     from x_report_runtime import parse_target_url, report_types_payload
@@ -485,18 +492,59 @@ def parse_report_command(text: str) -> tuple[bool, Dict[str, Any], str]:
     return True, payload, ""
 
 
+def loose_report_body(text: str) -> str | None:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    if raw.startswith("/") and not REPORT_COMMAND_RE.match(raw):
+        return None
+    url_match = REPORT_URL_RE.search(raw)
+    if not url_match:
+        return None
+    target = url_match.group(0).rstrip(").,，。；;、")
+    outside = (raw[: url_match.start()] + " " + raw[url_match.end() :]).strip()
+    braced_type = REPORT_BRACED_TYPE_RE.search(target)
+    explicit_type = REPORT_EXPLICIT_TYPE_RE.search(outside)
+    leading_type = REPORT_LEADING_TYPE_RE.search(raw)
+    type_value = (
+        braced_type.group(1)
+        if braced_type
+        else explicit_type.group(1)
+        if explicit_type
+        else leading_type.group(1)
+        if leading_type
+        else ""
+    )
+    if not type_value:
+        return None
+    starts_like_target = raw.startswith(target) or bool(leading_type and url_match.start() <= leading_type.end() + 4)
+    if not (REPORT_INTENT_RE.search(raw) or starts_like_target):
+        return None
+
+    parts = [target]
+    if not braced_type:
+        parts.append(type_value)
+    parts.extend(match.group(1) for match in REPORT_FLAG_RE.finditer(raw))
+    parts.extend(match.group(1) for match in REPORT_KV_RE.finditer(raw))
+    return " ".join(dict.fromkeys(part for part in parts if part))
+
+
 def parse_report_command_v2(text: str) -> tuple[bool, Dict[str, Any], str]:
-    match = REPORT_COMMAND_RE.match(str(text or "").strip())
-    if not match:
-        return False, {}, ""
-    body = (match.group(1) or "").strip()
+    raw = str(text or "").strip()
+    match = REPORT_COMMAND_RE.match(raw)
+    if match:
+        body = (match.group(1) or "").strip()
+    else:
+        body = loose_report_body(raw)
+        if body is None:
+            return False, {}, ""
     if not body:
         return True, {}, "用法：/report https://x.com/user/status/id{1} dry-run；live 需要 confirm=REPORT。类型见 /report_types"
     parts = body.split()
     target = parts[0].strip()
     type_value = ""
-    dry_run = True
-    confirm = ""
+    dry_run = False
+    confirm = "REPORT"
     scope = "auto"
     force = False
     details = ""
@@ -538,8 +586,6 @@ def parse_report_command_v2(text: str) -> tuple[bool, Dict[str, Any], str]:
         return True, {}, f"举报目标格式不对：{one_line(exc, 180)}"
     if parsed.type_code is None:
         return True, {}, "缺少举报类型码。用法：/report https://x.com/user/status/id{1}，类型见 /report_types"
-    if not dry_run and confirm != "REPORT":
-        return True, {}, "live 举报必须带 confirm=REPORT。"
     return True, {
         "target_url": target,
         "type_code": parsed.type_code,
@@ -557,8 +603,8 @@ def format_report_types() -> str:
     rows = ["举报类型："]
     for item in report_types_payload().get("types", []):
         rows.append(f"{{{item['code']}}} {item['label']} - {item['slug']}")
-    rows.append("用法：/report https://x.com/user/status/id{1} dry-run")
-    rows.append("live：/report https://x.com/user/status/id{1} live confirm=REPORT")
+    rows.append("用法：/report https://x.com/user/status/id{1}（owner 默认直接提交/入队）")
+    rows.append("预览：/report https://x.com/user/status/id{1} dry")
     return "\n".join(rows)[:MAX_TELEGRAM_TEXT]
 
 
@@ -598,11 +644,14 @@ def compact_report_result(result: Dict[str, Any]) -> str:
     status = result.get("status") or ("sent" if result.get("sent") else "unknown")
     type_text = result.get("resolved_type") or result.get("reason") or result.get("type_code") or "report"
     task = f" task={result.get('task_id')}" if result.get("task_id") else ""
-    return (
+    text = (
         f"report {type_text} {screen}: "
         f"status={status} ok={bool(result.get('ok'))} sent={bool(result.get('sent'))}"
         f"{task}"
     )
+    if result.get("error"):
+        text += f" error={one_line(result.get('error'), 180)}"
+    return text
 
 
 def handle_report_command(
