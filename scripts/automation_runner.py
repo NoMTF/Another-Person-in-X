@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-BROWSE_REFERENCE_PER_200 = {"like": 15, "repost": 35, "reply": 30, "quote": 10, "follow": 1}
+BROWSE_REFERENCE_PER_200 = {"like": 15, "repost": 35, "reply": 36, "quote": 14, "follow": 1}
+REPLY_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["reply"] / BROWSE_REFERENCE_PER_200["like"]
 REPOST_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["repost"] / BROWSE_REFERENCE_PER_200["like"]
 QUOTE_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["quote"] / BROWSE_REFERENCE_PER_200["like"]
 
@@ -215,10 +216,36 @@ def repost_limit_for_likes(max_likes: int) -> int:
     return max(1, round(max_likes * REPOST_TO_LIKE_RATIO)) if max_likes >= 2 else 1
 
 
+def reply_limit_for_likes(max_likes: int) -> int:
+    if max_likes <= 0:
+        return 0
+    return max(1, round(max_likes * REPLY_TO_LIKE_RATIO))
+
+
 def quote_limit_for_likes(max_likes: int) -> int:
     if max_likes <= 0:
         return 0
     return max(1, round(max_likes * QUOTE_TO_LIKE_RATIO))
+
+
+def action_desires(item: Dict[str, Any]) -> Dict[str, int]:
+    raw = item.get("action_desires") or item.get("desires") or {}
+    if isinstance(raw, dict):
+        scores = {
+            name: max(0, min(100, int(raw.get(name) or raw.get(f"{name}_desire") or 0)))
+            for name in ("reply", "like", "repost", "quote")
+        }
+        if any(scores.values()):
+            return scores
+    source_rank = int(item.get("source_rank") or 0)
+    persona_score = int(item.get("persona_score") or 0)
+    base = source_rank * 0.13 + persona_score * 1.2
+    return {
+        "reply": max(0, min(100, round(base + (12 if persona_score >= 16 else 0)))),
+        "like": max(0, min(100, round(18 + source_rank * 0.1 + persona_score * 0.8))),
+        "repost": max(0, min(100, round(8 + source_rank * 0.2 + persona_score * 1.1))),
+        "quote": max(0, min(100, round(base * 0.7 + (10 if persona_score >= 16 else 0)))),
+    }
 
 
 def rank_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -253,13 +280,15 @@ def generate_browse_candidates(
     max_reposts: int | None,
     max_quotes: int | None,
     max_follows: int,
+    max_replies: int | None = None,
     style_spectrum: Dict[str, Any] | None = None,
 ) -> List[Candidate]:
     ranked = rank_items(items)
     candidates: List[Candidate] = []
+    effective_max_replies = reply_limit_for_likes(max_likes) if max_replies is None else max_replies
     effective_max_reposts = repost_limit_for_likes(max_likes) if max_reposts is None else max_reposts
     effective_max_quotes = quote_limit_for_likes(max_likes) if max_quotes is None else max_quotes
-    counts = {"like": 0, "repost": 0, "quote": 0, "follow": 0}
+    counts = {"reply": 0, "like": 0, "repost": 0, "quote": 0, "follow": 0}
     seen_targets: set[str] = set()
     seen_follow_targets: set[str] = set()
     for item in ranked[: max(1, max_items)]:
@@ -270,6 +299,7 @@ def generate_browse_candidates(
         source_rank = int(item.get("source_rank") or 0)
         persona_score = int(item.get("persona_score") or 0)
         hits = item.get("persona_hits") or []
+        desires = action_desires(item)
         style_sample = sample_style_spectrum(style_spectrum or {}, "browse")
         common = {
             "target": target,
@@ -281,39 +311,53 @@ def generate_browse_candidates(
                 "persona_score": persona_score,
                 "priority_score": item.get("priority_score", 0),
                 "persona_hits": hits,
+                "action_desires": desires,
+                "action_desire_reasons": item.get("action_desire_reasons") or [],
                 "style_sample": style_sample,
                 "context_signals": item.get("context_signals") or {},
                 "browse_text": str(item.get("text") or "")[:240],
             },
         }
-        if counts["like"] < max_likes:
+        if desires["reply"] >= 58 and counts["reply"] < effective_max_replies:
+            reply_style = sample_style_spectrum(style_spectrum or {}, "reply")
+            candidates.append(
+                Candidate(
+                    "reply",
+                    f"browse item has reply desire={desires['reply']} because it can trigger a persona view; source_rank={source_rank}; persona_score={persona_score}; reference_per_200={BROWSE_REFERENCE_PER_200}",
+                    text=str(item.get("reply_text") or item.get("draft") or ""),
+                    **common,
+                )
+            )
+            candidates[-1].metadata["style_sample"] = reply_style
+            candidates[-1].metadata["needs_persona_generation"] = not bool(candidates[-1].text.strip())
+            counts["reply"] += 1
+        if desires["like"] >= 38 and counts["like"] < max_likes:
             candidates.append(
                 Candidate(
                     "like",
-                    f"browse selected low-risk relevant item; source_rank={source_rank}; persona_score={persona_score}",
+                    f"browse item has like desire={desires['like']}; source_rank={source_rank}; persona_score={persona_score}",
                     **common,
                 )
             )
             counts["like"] += 1
         if (
-            source_rank >= 90
-            and persona_score >= 16
+            desires["repost"] >= 56
             and counts["repost"] < effective_max_reposts
         ):
             candidates.append(
                 Candidate(
                     "repost",
-                    f"browse selected high-signal item worth quiet boosting; source_rank={source_rank}; persona_score={persona_score}; reference_per_200={BROWSE_REFERENCE_PER_200}",
+                    f"browse item has repost desire={desires['repost']} and is worth quiet boosting; source_rank={source_rank}; persona_score={persona_score}; reference_per_200={BROWSE_REFERENCE_PER_200}",
                     **common,
                 )
             )
             counts["repost"] += 1
-        if (persona_score >= 16 or (source_rank >= 100 and persona_score >= 8)) and counts["quote"] < effective_max_quotes:
+        if desires["quote"] >= 62 and counts["quote"] < effective_max_quotes:
             quote_style = sample_style_spectrum(style_spectrum or {}, "quote")
             candidates.append(
                 Candidate(
                     "quote",
-                    f"browse selected item worth persona quote when the persona generator has something natural to add; source_rank={source_rank}; persona_score={persona_score}; reference_per_200={BROWSE_REFERENCE_PER_200}",
+                    f"browse item has quote desire={desires['quote']}: reply-worthy plus worth publishing as the persona's own visible stance; source_rank={source_rank}; persona_score={persona_score}; reference_per_200={BROWSE_REFERENCE_PER_200}",
                     text=str(item.get("quote_text") or item.get("draft") or ""),
                     **common,
                 )
@@ -359,6 +403,7 @@ def generate_candidates(
     max_browse_reposts: int | None = None,
     max_browse_quotes: int | None = None,
     max_browse_follows: int = 1,
+    max_browse_replies: int | None = None,
     style_spectrum: Dict[str, Any] | None = None,
 ) -> List[Candidate]:
     if kind == "post":
@@ -378,6 +423,7 @@ def generate_candidates(
             max_browse_reposts,
             max_browse_quotes,
             max_browse_follows,
+            max_browse_replies,
             style_spectrum,
         )
     return []
@@ -461,6 +507,12 @@ def main() -> int:
     parser.add_argument("--max-browse-items", type=int, default=3)
     parser.add_argument("--max-browse-likes", type=int, default=3)
     parser.add_argument(
+        "--max-browse-replies",
+        type=int,
+        default=None,
+        help="Defaults from the browse reference mix: about 36 replies per 15 likes.",
+    )
+    parser.add_argument(
         "--max-browse-reposts",
         type=int,
         default=None,
@@ -490,6 +542,7 @@ def main() -> int:
         args.max_browse_reposts,
         args.max_browse_quotes,
         args.max_browse_follows,
+        args.max_browse_replies,
         style_spectrum,
     )
     results = []

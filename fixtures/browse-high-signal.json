@@ -1,12 +1,12 @@
 [
   {
     "id": "2063963579611836422",
-    "text": "AI timeline notes from a followed account about persona agents and X behavior.",
+    "text": "MtF 为什么总被误解成男娘啊，我感觉这个说法真的有点偷换。",
     "source": "get_latest_timeline",
     "user": {
       "screen_name": "example"
     },
-    "persona_hits": ["ai", "timeline", "persona"],
+    "persona_hits": ["mtf", "跨性别", "identity"],
     "source_rank": 100,
     "persona_score": 24,
     "priority_score": 100024,

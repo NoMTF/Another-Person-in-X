@@ -55,6 +55,20 @@ SLANG_OR_MEME_RE = re.compile(
 KUN_MEME_RE = re.compile(r"露出鸡脚|露鸡脚|鸡脚|小黑子|蔡徐坤|只因|你干嘛|哎哟|坤坤|坤梗", re.I)
 
 LOW_CONTEXT_RE = re.compile(r"^[\s。！？!?,，~～…w哈啊嗯哦喵草笑死]+$", re.I)
+ACTIONABLE_TOPIC_RE = re.compile(
+    r"(为什么|为啥|怎么看|咋看|有没有|是不是|能不能|要不要|该不该|如何|怎么|吗|？|\?|"
+    r"\bwhy\b|\bhow\b|\bwhat do you think\b|\bwdyt\b)",
+    re.I,
+)
+PUBLIC_STANCE_RE = re.compile(
+    r"(我觉得|我感觉|我认为|问题是|误解|争议|观点|态度|立场|不该|应该|其实|反而|"
+    r"离谱|抽象|好像|是不是|为什么|群体|身份|表达|被看见|被误解)",
+    re.I,
+)
+PRIVATE_OR_SENSITIVE_RE = re.compile(
+    r"(想死|不想活|自杀|自残|轻生|剂量|药|医生|医院|诊断|地址|开盒|人肉|裸照|挂人|网暴)",
+    re.I,
+)
 
 
 def strip_urls(text: str) -> str:
@@ -455,6 +469,70 @@ def source_priority(source: str) -> int:
     return 40
 
 
+def clamp_score(value: float) -> int:
+    return max(0, min(100, int(round(value))))
+
+
+def browse_action_desires(
+    item: dict[str, Any],
+    text: str,
+    source_rank: int,
+    persona_score: int,
+    persona_hits: list[str],
+) -> dict[str, Any]:
+    clean = strip_urls(text)
+    source = str(item.get("source") or "").lower()
+    followed = source_rank >= 90 or "timeline" in source or "monitor_user" in source
+    topicful = bool(ACTIONABLE_TOPIC_RE.search(clean) or PUBLIC_STANCE_RE.search(clean))
+    asks_view = bool(ACTIONABLE_TOPIC_RE.search(clean))
+    public_stance = bool(PUBLIC_STANCE_RE.search(clean))
+    has_media = bool(item.get("image_summary") or item.get("media") or item.get("images") or item.get("photos"))
+    sensitive = bool(PRIVATE_OR_SENSITIVE_RE.search(clean))
+    ad_flag = is_ad_or_spam(text)
+    base_interest = source_rank * 0.13 + persona_score * 1.25 + min(14, len(persona_hits) * 3)
+
+    reply = base_interest + (22 if asks_view else 0) + (13 if public_stance else 0) + (7 if has_media else 0)
+    like = 18 + source_rank * 0.10 + persona_score * 0.8 + (6 if followed else 0)
+    repost = 8 + source_rank * 0.20 + persona_score * 1.1 + (12 if followed else 0) + (5 if public_stance else 0)
+    quote = reply * 0.58 + repost * 0.34 + (16 if public_stance else 0) + (10 if topicful else 0) + (6 if has_media else 0)
+
+    if sensitive:
+        reply -= 28
+        like -= 12
+        repost -= 44
+        quote -= 48
+    if ad_flag:
+        reply -= 3
+        like -= 8
+        repost -= 20
+        quote -= 12
+    if is_low_context(text):
+        reply -= 45
+        quote -= 45
+        repost -= 30
+
+    scores = {
+        "reply": clamp_score(reply),
+        "like": clamp_score(like),
+        "repost": clamp_score(repost),
+        "quote": clamp_score(quote),
+    }
+    reasons: list[str] = []
+    if asks_view:
+        reasons.append("reply: asks or invites a view")
+    if public_stance:
+        reasons.append("quote: has public stance material")
+    if followed:
+        reasons.append("repost: followed/monitored source")
+    if has_media:
+        reasons.append("reply/quote: image context can add specificity")
+    if ad_flag:
+        reasons.append("ad/spam label is advisory; avoid amplification unless relevance is clear")
+    if sensitive:
+        reasons.append("sensitive/private context reduces spread desire")
+    return {"scores": scores, "reasons": reasons}
+
+
 def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str] | None = None) -> list[dict[str, Any]]:
     keywords = keywords or DEFAULT_PERSONA_KEYWORDS
     if isinstance(candidates, dict):
@@ -481,10 +559,13 @@ def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str]
         enriched["text"] = text
         source_rank = max(source_priority(source), existing_source_rank)
         persona_score = max(min(40, len(merged_hits) * 8), min(40, existing_persona_score))
+        desires = browse_action_desires(enriched, text, source_rank, persona_score, merged_hits)
         enriched["persona_hits"] = merged_hits[:8]
         enriched["source_rank"] = source_rank
         enriched["persona_score"] = persona_score
         enriched["priority_score"] = source_rank * 1000 + persona_score
+        enriched["action_desires"] = desires["scores"]
+        enriched["action_desire_reasons"] = desires["reasons"]
         enriched["context_signals"] = {
             "ad_or_spam": is_ad_or_spam(text),
             "ad_or_spam_policy": "context_flag_only",
