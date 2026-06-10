@@ -36,6 +36,22 @@ HIGH_RISK_RE = re.compile(
     re.I,
 )
 
+AD_OR_SPAM_RE = re.compile(
+    r"(推广|广告|引流|接单|约稿|返利|优惠券|抽奖|空投|薅羊毛|兼职|副业|代购|代发|推广位|"
+    r"加群|进群|私信我|私聊我|VX|微信|电报群|telegram群|http[s]?://|t\.me/|bit\.ly|"
+    r"稳赚|日赚|月入|贷款|博彩|棋牌|成人视频|色图|裸聊|"
+    r"\bgiveaway\b|\bairdrop\b|\bpromo\b|\bsponsor(?:ed)?\b|\bdm me\b|\blink in bio\b)",
+    re.I,
+)
+
+SLANG_OR_MEME_RE = re.compile(
+    r"(?<!\d)23(?!\d)|114514|1919810|抽象|典|孝|绷|蚌埠住|大的|小登|查重|缝合|赢麻|"
+    r"露出鸡脚|鸡脚|小黑子|蔡徐坤|只因|你干嘛|哎哟|坤坤",
+    re.I,
+)
+
+LOW_CONTEXT_RE = re.compile(r"^[\s。！？!?,，~～…w哈啊嗯哦喵草笑死]+$", re.I)
+
 
 def strip_urls(text: str) -> str:
     return re.sub(r"https?://\S+", " ", str(text or ""))
@@ -379,6 +395,31 @@ def is_high_risk(text: str) -> bool:
     return bool(HIGH_RISK_RE.search(strip_urls(text)))
 
 
+def is_ad_or_spam(text: str) -> bool:
+    return bool(AD_OR_SPAM_RE.search(str(text or "")))
+
+
+def is_low_context(text: str) -> bool:
+    clean = strip_urls(text).strip()
+    if not clean:
+        return True
+    if len(clean) <= 3:
+        return True
+    return bool(len(clean) <= 10 and LOW_CONTEXT_RE.fullmatch(clean))
+
+
+def browse_skip_signal(text: str) -> str:
+    if is_high_risk(text):
+        return "high_risk"
+    if is_prompt_injection(text):
+        return "prompt_injection"
+    if is_ad_or_spam(text):
+        return "ad_or_spam"
+    if is_low_context(text):
+        return "low_context"
+    return ""
+
+
 def keyword_hits(text: str, keywords: list[str]) -> list[str]:
     haystack = strip_urls(text).lower()
     hits: list[str] = []
@@ -408,7 +449,8 @@ def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str]
     ranked: list[dict[str, Any]] = []
     for item in candidates:
         text = clean_text(item.get("text", ""))
-        if is_high_risk(text) or is_prompt_injection(text):
+        skip_signal = browse_skip_signal(text)
+        if skip_signal:
             continue
         source = str(item.get("source") or "")
         hits = keyword_hits(" ".join([text, source, str(item.get("user") or ""), str(item.get("quote") or "")]), keywords)
@@ -430,6 +472,11 @@ def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str]
         enriched["source_rank"] = source_rank
         enriched["persona_score"] = persona_score
         enriched["priority_score"] = source_rank * 1000 + persona_score
+        enriched["context_signals"] = {
+            "ad_or_spam": is_ad_or_spam(text),
+            "low_context": is_low_context(text),
+            "slang_or_meme": bool(SLANG_OR_MEME_RE.search(text)),
+        }
         ranked.append(enriched)
     ranked.sort(
         key=lambda item: (

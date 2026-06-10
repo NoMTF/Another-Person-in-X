@@ -24,13 +24,14 @@ Use this reference before generating or updating a persona skill.
 4. Normalize URLs and whitespace.
 5. Redact secrets, phone/email/address-like strings, and obvious private identifiers.
 6. Build voice DNA: length, punctuation, recurring words, openings, endings.
-7. Build retrieval index from sanitized examples.
-8. Score methods:
+7. Build `data/style_spectrum.json`: corpus-derived feature dimensions, common clusters, rare-but-valid clusters, and safe example anchors.
+8. Build retrieval index from sanitized examples.
+9. Score methods:
    - statistical voice DNA
    - nearest-neighbor retrieval
    - LLM digest
    - holdout reproduction
-9. Emit skill files:
+10. Emit skill files:
    - `SKILL.md`
    - `voice.md`
    - `social.md`
@@ -40,6 +41,7 @@ Use this reference before generating or updating a persona skill.
    - `scripts/ground.py`
    - `data/sanitized_corpus.jsonl`
    - `data/index.json`
+   - `data/style_spectrum.json`
    - `data/distill_report.json`
 
 ## Holdout Test
@@ -49,19 +51,19 @@ Use this reference before generating or updating a persona skill.
 - Score "like source", "stable", "not AI-ish", "safe", "grounded".
 - Rewrite voice rules if the persona collapses to repetitive catchphrases.
 
-## Variation System
+## Style Spectrum
 
-Each generation samples a mood state:
+Do not reduce a persona to fixed presets such as "long", "cold", "soft", or "sharp". Each generation should sample a `style_sample` from `data/style_spectrum.json` and ground the draft against nearby source examples.
 
-- everyday
-- excited
-- tired
-- serious
-- sharp
-- very-short
-- long-form
+The spectrum should include:
 
-Variation changes length, rhythm, seriousness, and emotional temperature. It must not change the persona's core identity, safety boundary, or relationship map.
+- Length bucket and line shape.
+- Intent, such as specific question, small opinion, complaint/pushback, self-reaction, timeline reaction, or observation.
+- Stance, texture density, punctuation shape, opening shape, and ending shape.
+- Topic family and 1-3 safe example anchors.
+- Rare-but-valid clusters so low-frequency real expressions survive instead of being forced back to the median style.
+
+Variation changes concrete topic, length, rhythm, stance, punctuation, and texture. It must not change the persona's core identity, safety boundary, or relationship map.
 
 ## Crisis Voice Test
 
