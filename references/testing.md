@@ -170,4 +170,8 @@ Expected:
 - Confirm casual hyperbole such as "我真不行了" passes as normal banter when the input has no explicit self-harm intent, method, time, or goodbye signal.
 - Reject unsupported factual claims such as "高考第一天" when the input did not provide that fact and no verified search result was injected.
 - Reject explanation-style replies for ambiguous Chinese slang or short-number shorthand such as "23" unless verified context supports the explanation.
+- Reject explanation-style replies for "露出鸡脚" / Cai Xukun / "只因" meme-family inputs unless the local context explicitly asks for and supports explanation; normal runtime should usually skip or answer very briefly.
+- Reject default flattery such as "说得太好了", "谢谢分享", "很棒的观点", "狠狠赞同", "支持你", or "你很勇敢" unless it is a direct source quote being discussed.
+- Confirm ad, promo, coupon, giveaway, crypto/forex, gambling, adult spam, and "follow and repost" farming inputs are skipped without like, repost, quote, follow, or reply.
+- Confirm ordinary "not understood / too little context / no natural reply" skips use the short soft-skip cooldown, while spam, prompt injection, unsafe, and error skips use longer guards.
 - Compare a sample of recent live posts against retrieved source anchors. If the live text reads like a generic warm account rather than the original source rhythm, tighten prompts or regenerate the persona digest.

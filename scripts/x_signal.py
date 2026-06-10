@@ -40,15 +40,19 @@ AD_OR_SPAM_RE = re.compile(
     r"(推广|广告|引流|接单|约稿|返利|优惠券|抽奖|空投|薅羊毛|兼职|副业|代购|代发|推广位|"
     r"加群|进群|私信我|私聊我|VX|微信|电报群|telegram群|http[s]?://|t\.me/|bit\.ly|"
     r"稳赚|日赚|月入|贷款|博彩|棋牌|成人视频|色图|裸聊|"
-    r"\bgiveaway\b|\bairdrop\b|\bpromo\b|\bsponsor(?:ed)?\b|\bdm me\b|\blink in bio\b)",
+    r"粉丝福利|领取福利|关注转发|转发关注|私信领取|联系客服|在线咨询|开户链接|注册链接|"
+    r"优惠码|购买链接|下单|带货|店铺|返现|理财|投资|合约|币圈|约炮|福利姬|"
+    r"\bgiveaway\b|\bairdrop\b|\bpromo\b|\bsponsor(?:ed)?\b|\bdm me\b|\blink in bio\b|"
+    r"\bfree\s+cash\b|\bcrypto\b|\bforex\b)",
     re.I,
 )
 
 SLANG_OR_MEME_RE = re.compile(
     r"(?<!\d)23(?!\d)|114514|1919810|抽象|典|孝|绷|蚌埠住|大的|小登|查重|缝合|赢麻|"
-    r"露出鸡脚|鸡脚|小黑子|蔡徐坤|只因|你干嘛|哎哟|坤坤",
+    r"露出鸡脚|露鸡脚|鸡脚|小黑子|蔡徐坤|只因|你干嘛|哎哟|坤坤|坤梗",
     re.I,
 )
+KUN_MEME_RE = re.compile(r"露出鸡脚|露鸡脚|鸡脚|小黑子|蔡徐坤|只因|你干嘛|哎哟|坤坤|坤梗", re.I)
 
 LOW_CONTEXT_RE = re.compile(r"^[\s。！？!?,，~～…w哈啊嗯哦喵草笑死]+$", re.I)
 
@@ -420,6 +424,17 @@ def browse_skip_signal(text: str) -> str:
     return ""
 
 
+def meme_context_hint(text: str) -> str:
+    if KUN_MEME_RE.search(str(text or "")):
+        return (
+            "possible_kun_meme: likely Cai Xukun / 只因 meme family, not literal chicken feet. "
+            "Use only as a context hint; do not explain the meme unless the local context makes it natural."
+        )
+    if SLANG_OR_MEME_RE.search(str(text or "")):
+        return "possible_cn_slang_or_meme: infer from local context, otherwise skip or stay brief."
+    return ""
+
+
 def keyword_hits(text: str, keywords: list[str]) -> list[str]:
     haystack = strip_urls(text).lower()
     hits: list[str] = []
@@ -476,6 +491,7 @@ def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str]
             "ad_or_spam": is_ad_or_spam(text),
             "low_context": is_low_context(text),
             "slang_or_meme": bool(SLANG_OR_MEME_RE.search(text)),
+            "meme_context_hint": meme_context_hint(text),
         }
         ranked.append(enriched)
     ranked.sort(
