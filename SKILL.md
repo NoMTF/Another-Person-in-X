@@ -46,6 +46,7 @@ This skill turns desktop Codex or Claude Code into the deployment and maintenanc
 - `scripts/admin_server.py`: FastAPI admin API backed by SQLite for feature flags, rate config, persona registry, audit log, pause/read-only controls, and memory entries.
 - `scripts/x_adapter.py`: X/Twitter adapter boundary with twikit and official-API placeholders, dry-run support, and no vendored long-lived dependencies.
 - `scripts/x_signal.py`: pure scoring helpers for X mention/quote detection, follow-back intent, persona-interest browse ranking, and high-risk browse skipping.
+- `scripts/circadian_runtime.py`: shared daily wake/sleep scheduler for post, reply-watch, and proactive-browse services, including owner Telegram schedule notifications.
 - `scripts/automation_runner.py`: limited scheduled-action runner that checks admin rate limits, writes audit rows, and calls the X adapter in dry-run or live mode.
 - `scripts/schedule_posts.py`: creates the default randomized 5/day original-post pending queue.
 - `scripts/health_check.py`: redacted OpenClaw/Telegram/profile health report for repeatable debugging.
@@ -60,6 +61,7 @@ This skill turns desktop Codex or Claude Code into the deployment and maintenanc
 - Admin bind: `127.0.0.1:18880`.
 - OpenClaw gateway bind: loopback unless explicitly exposed with token/password auth.
 - Automation: enabled but limited; 5 original posts/day; shadow mode available and recommended for new personas.
+- Circadian automation: generate a daily wake/sleep window around 07:00 to 02:00 next day, notify the owner once, and keep scheduled posts/replies/browsing inside the active window unless owner-triggered.
 - Memory: official OpenClaw memory plus local SQLite FTS; no cloud memory by default.
 - Persona variation: sample a corpus-derived `style_sample` from `data/style_spectrum.json` for every generated action; variation changes length, line shape, intent, stance, texture, punctuation, and topic without changing identity or core values.
 - Persona feedback: runtime agents store owner/public feedback such as "AI 味", "不像本人", or "口吻不对" in `persona_feedback.jsonl` and inject only a compact recent digest into replies, proactive browsing, quotes, and original-post generation.
@@ -68,7 +70,7 @@ This skill turns desktop Codex or Claude Code into the deployment and maintenanc
 - Context judge: regex and keyword matches are cheap signals only. Reply, quote, browse, and crisis decisions must use a context-judgment pass over the full text, quoted/status-link evidence, image summary, retrieved persona anchors, and recent self tweets. Do not infer meaning from a single keyword, short number, or slang token.
 - Recent-self calibration: before replies, quotes, proactive interactions, or original posts, runtime scripts should fetch the account's recent own tweets and use them as a compact style/stance calibration sample. This is automatic self-correction, separate from owner feedback.
 - Original-post topicing: do not use a fixed topic preset as the primary generator. First propose persona-fit topic contexts from anchors, recent self tweets, and feedback, then generate drafts and run a persona judge for fit, topicfulness, non-template quality, non-repetition, and safety. Identity or community topics such as "MtF 被误解成男娘" may be valid only when they fit the persona and read like a natural post, not a forced keyword.
-- Slang, ads, and stance: unknown memes may be skipped or answered with a tiny natural "didn't catch it" style response; obvious ads/spam are skipped; personas should not default to agreeing, flattering, thanking, or praising users.
+- Slang, ads, and stance: unknown memes may be skipped or answered with a tiny natural "didn't catch it" style response. Ad/spam labels are context flags, not hard blockers; do not amplify scams or farming, but do not ignore a normal relevant reply merely because X hid it as spam. Personas should not default to agreeing, flattering, thanking, or praising users.
 
 ## Reference Loading
 

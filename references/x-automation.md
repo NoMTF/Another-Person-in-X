@@ -71,7 +71,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Browse-time follows should only target high-relevance authors that are not already followed and are not the active account itself. Followed-timeline items are treated as already followed unless the source payload explicitly says otherwise.
 - Browse-time reply/quote decisions should use a context-judgment pass over the full tweet, quote/status evidence, image summary, persona anchors, and recent own tweets. Regex and keyword matches are cheap signals only; they must not decide slang meaning, crisis status, or fact claims by themselves.
 - Meme and slang handling should be honest. If a phrase is likely a meme but the model cannot infer it from context, the agent may skip or briefly say it did not catch the reference. Do not invent explanations or force a reply. Known examples such as "露出鸡脚" / Cai Xukun / "只因" should be treated as context-sensitive signals, not fixed templates or encyclopedia prompts.
-- Ads, promotions, giveaways, group invites, loans, gambling, adult spam, crypto/forex pitches, "follow and repost" farming, coupons, and obvious engagement farming should be skipped without reply, quote, repost, like, or follow.
+- Ads, promotions, giveaways, group invites, loans, gambling, adult spam, crypto/forex pitches, "follow and repost" farming, coupons, and obvious engagement farming are context signals, not hard blockers. Do not amplify scams, farming, or dangerous links with likes/reposts/quotes/follows; however, if X has classified a real person's relevant reply as spam, the agent may still answer or interact after the context judge finds it natural, low-risk, and persona-consistent.
 - The persona should not agree with, praise, thank, or flatter users by default. It can ignore, decline, lightly push back, or answer dryly when that fits the source corpus.
 - Low-risk challenge or teasing is not automatically banned; it may receive a low-probability persona-fit reply. Harassment, brigading, dogpiles, and attacks on protected traits remain skipped.
 - Report/abuse actions are not part of proactive browsing. A report endpoint, if present, must be owner-only, single-target, dry-run by default, explicit-confirm for live mode, and audit logged without credentials.
@@ -81,6 +81,14 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Strip URLs before keyword scoring so short keywords such as `AI` do not match random t.co path fragments.
 - Skip or heavily downrank self-harm, overdose, doxxing, harassment, and brigading topics before they reach proactive like/repost/quote/follow decisions.
 - If a direct reply, mention, or quote of the bot contains self-harm or "want to die" language, route it to the persona crisis-support reply mode instead of the normal browse engagement model.
+
+## Circadian Schedule
+
+- Runtime post scheduling, reply watching, and proactive browsing should use a daily circadian schedule instead of acting 24 hours a day.
+- Default local active window is randomly sampled each day from roughly `06:45-08:20` wake time through `25:15-26:40` sleep time, equivalent to about 07:00 to 02:00 the next day.
+- Generate one schedule per local day, persist it in `circadian_state.json`, and send the owner one Telegram notification with the wake/sleep times.
+- During the sleep window, oneshot services should exit successfully with an audit event such as `*_circadian_sleep_skip` rather than looking broken or retrying aggressively.
+- Pending original posts should be scheduled or rescheduled inside the active window. Reply/browse checks may wait until the next active window unless the owner explicitly triggers a command.
 
 ## Skip Cases
 

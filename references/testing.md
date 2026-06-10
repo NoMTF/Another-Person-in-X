@@ -174,6 +174,7 @@ Expected:
 - Reject explanation-style replies for ambiguous Chinese slang or short-number shorthand such as "23" unless verified context supports the explanation.
 - Reject explanation-style replies for "露出鸡脚" / Cai Xukun / "只因" meme-family inputs unless the local context explicitly asks for and supports explanation; normal runtime should usually skip or answer very briefly.
 - Reject default flattery such as "说得太好了", "谢谢分享", "很棒的观点", "狠狠赞同", "支持你", or "你很勇敢" unless it is a direct source quote being discussed.
-- Confirm ad, promo, coupon, giveaway, crypto/forex, gambling, adult spam, and "follow and repost" farming inputs are skipped without like, repost, quote, follow, or reply.
-- Confirm ordinary "not understood / too little context / no natural reply" skips use the short soft-skip cooldown, while spam, prompt injection, unsafe, and error skips use longer guards.
+- Confirm ad, promo, coupon, giveaway, crypto/forex, gambling, adult spam, and "follow and repost" farming inputs are context flags, not hard blockers. Scam/farming/dangerous targets should not be amplified, but a relevant low-risk reply hidden under X spam classification should still be eligible for a persona-natural answer.
+- Confirm ordinary "not understood / too little context / no natural reply" skips use the short soft-skip cooldown, while prompt injection, unsafe, and error skips use longer guards.
 - Compare a sample of recent live posts against retrieved source anchors. If the live text reads like a generic warm account rather than the original source rhythm, tighten prompts or regenerate the persona digest.
+- Confirm `scripts/circadian_runtime.py` generates one daily wake/sleep schedule, sends at most one owner notification per day, and lets schedulers place pending posts only inside the active window.

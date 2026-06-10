@@ -417,8 +417,6 @@ def browse_skip_signal(text: str) -> str:
         return "high_risk"
     if is_prompt_injection(text):
         return "prompt_injection"
-    if is_ad_or_spam(text):
-        return "ad_or_spam"
     if is_low_context(text):
         return "low_context"
     return ""
@@ -489,6 +487,7 @@ def rank_browse_candidates(candidates: list[dict[str, Any]], keywords: list[str]
         enriched["priority_score"] = source_rank * 1000 + persona_score
         enriched["context_signals"] = {
             "ad_or_spam": is_ad_or_spam(text),
+            "ad_or_spam_policy": "context_flag_only",
             "low_context": is_low_context(text),
             "slang_or_meme": bool(SLANG_OR_MEME_RE.search(text)),
             "meme_context_hint": meme_context_hint(text),
