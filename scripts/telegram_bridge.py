@@ -29,6 +29,7 @@ FACT_SEARCH_ENABLED = os.environ.get("FACT_SEARCH_ENABLED", "1").strip().lower()
 FACT_SEARCH_TIMEOUT_SECONDS = int(os.environ.get("FACT_SEARCH_TIMEOUT_SECONDS", "8"))
 DEFAULT_EMPTY_REPLY = "我刚刚卡了一下，再发一次嘛 qwq"
 X_TOOLS_API = os.environ.get("X_TOOLS_API", "").strip().rstrip("/")
+REPORT_TYPES_COMMAND_RE = re.compile(r"^/(?:report_types|reporttypes|report_type|举报类型|举报类型表)(?:@\w+)?\s*$", re.I)
 ALL_COMMAND_RE = re.compile(r"^/all(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
 REPORT_COMMAND_RE = re.compile(r"^/(?:report|举报)(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
 BROADCAST_REPORT_RE = re.compile(r"(^|\s)/(?:report|举报)\b|举报|report\s+(?:@|https?://|\d)", re.I)
@@ -36,6 +37,12 @@ BROADCAST_SECRET_RE = re.compile(
     r"(auth[_-]?token|ct0|api[_-]?key|secret|bearer\s+|sk-[A-Za-z0-9]|password|密码|密钥|token\s*[:=])",
     re.I,
 )
+
+try:
+    from x_report_runtime import parse_target_url, report_types_payload
+except Exception:  # pragma: no cover - deployed bridge should carry x_report_runtime.py beside it.
+    parse_target_url = None  # type: ignore[assignment]
+    report_types_payload = None  # type: ignore[assignment]
 
 PERSONA_FEEDBACK_RE = re.compile(
     r"(像\s*ai|ai\s*味|AI味|不像|不像本人|不够像|人设崩|人设跑偏|跑偏|露馅|露出破绽|"
@@ -478,6 +485,92 @@ def parse_report_command(text: str) -> tuple[bool, Dict[str, Any], str]:
     return True, payload, ""
 
 
+def parse_report_command_v2(text: str) -> tuple[bool, Dict[str, Any], str]:
+    match = REPORT_COMMAND_RE.match(str(text or "").strip())
+    if not match:
+        return False, {}, ""
+    body = (match.group(1) or "").strip()
+    if not body:
+        return True, {}, "用法：/report https://x.com/user/status/id{1} dry-run；live 需要 confirm=REPORT。类型见 /report_types"
+    parts = body.split()
+    target = parts[0].strip()
+    type_value = ""
+    dry_run = True
+    confirm = ""
+    scope = "auto"
+    force = False
+    details = ""
+    for part in parts[1:]:
+        item = part.strip()
+        low = item.lower()
+        if low in {"live", "--live", "dry_run=false", "dry-run=false"}:
+            dry_run = False
+        elif low in {"dry", "dry-run", "dry_run=true", "dry-run=true"}:
+            dry_run = True
+        elif item.startswith(("type=", "type_code=", "reason=")):
+            type_value = item.split("=", 1)[1].strip() or type_value
+        elif item.startswith("confirm="):
+            confirm = item.split("=", 1)[1].strip()
+        elif item.startswith("scope="):
+            scope = item.split("=", 1)[1].strip() or scope
+        elif item.startswith("details="):
+            details = item.split("=", 1)[1].strip()
+        elif low in {"force", "--force", "force=true"}:
+            force = True
+        elif re.fullmatch(r"\d{1,3}", item) or low in {
+            "spam",
+            "scam",
+            "impersonation",
+            "abuse",
+            "harassment",
+            "privacy",
+            "self_harm",
+            "hate",
+            "violent",
+            "cse",
+        }:
+            type_value = item
+    if parse_target_url is None:
+        return True, {}, "report runtime module missing; deploy x_report_runtime.py beside telegram_bridge.py"
+    try:
+        parsed = parse_target_url(target, type_value or None)
+    except Exception as exc:
+        return True, {}, f"举报目标格式不对：{one_line(exc, 180)}"
+    if parsed.type_code is None:
+        return True, {}, "缺少举报类型码。用法：/report https://x.com/user/status/id{1}，类型见 /report_types"
+    if not dry_run and confirm != "REPORT":
+        return True, {}, "live 举报必须带 confirm=REPORT。"
+    return True, {
+        "target_url": target,
+        "type_code": parsed.type_code,
+        "scope": scope,
+        "dry_run": dry_run,
+        "confirm": confirm,
+        "details": details,
+        "force": force,
+    }, ""
+
+
+def format_report_types() -> str:
+    if report_types_payload is None:
+        return "report runtime module missing; cannot list report types."
+    rows = ["举报类型："]
+    for item in report_types_payload().get("types", []):
+        rows.append(f"{{{item['code']}}} {item['label']} - {item['slug']}")
+    rows.append("用法：/report https://x.com/user/status/id{1} dry-run")
+    rows.append("live：/report https://x.com/user/status/id{1} live confirm=REPORT")
+    return "\n".join(rows)[:MAX_TELEGRAM_TEXT]
+
+
+def handle_report_types_command(api: TelegramAPI, message: Dict[str, Any]) -> bool:
+    text = extract_text(message)
+    if not REPORT_TYPES_COMMAND_RE.match(str(text or "").strip()):
+        return False
+    chat_id = str((message.get("chat") or {}).get("id", ""))
+    api.send_message(chat_id, format_report_types(), message.get("message_id"))
+    return True
+
+
 def x_api_for_profile(profile: str) -> str:
     if X_TOOLS_API:
         return X_TOOLS_API
@@ -501,11 +594,14 @@ def post_json(url: str, payload: Dict[str, Any], timeout: int = 90) -> Dict[str,
 
 def compact_report_result(result: Dict[str, Any]) -> str:
     target = result.get("target") if isinstance(result.get("target"), dict) else {}
-    screen = target.get("screen_name") or result.get("target_url") or "target"
+    screen = target.get("screen_name") or result.get("screen_name") or result.get("normalized_url") or result.get("target_url") or "target"
+    status = result.get("status") or ("sent" if result.get("sent") else "unknown")
+    type_text = result.get("resolved_type") or result.get("reason") or result.get("type_code") or "report"
+    task = f" task={result.get('task_id')}" if result.get("task_id") else ""
     return (
-        f"report {result.get('reason', 'spam')} @{screen}: "
-        f"ok={bool(result.get('ok'))} sent={bool(result.get('sent'))} "
-        f"dry_run={bool(result.get('dry_run'))} live_enabled={bool(result.get('live_enabled'))}"
+        f"report {type_text} {screen}: "
+        f"status={status} ok={bool(result.get('ok'))} sent={bool(result.get('sent'))}"
+        f"{task}"
     )
 
 
@@ -517,7 +613,7 @@ def handle_report_command(
     owner_chat_id: str,
 ) -> bool:
     text = extract_text(message)
-    is_report, payload, error = parse_report_command(text)
+    is_report, payload, error = parse_report_command_v2(text)
     if not is_report:
         return False
     chat_id = str((message.get("chat") or {}).get("id", ""))
@@ -538,9 +634,11 @@ def handle_report_command(
                 "event": "REPORT_COMMAND",
                 "profile": profile,
                 "dry_run": payload.get("dry_run") is not False,
-                "reason": payload.get("reason"),
+                "type_code": payload.get("type_code"),
+                "target_url": payload.get("target_url"),
                 "ok": bool(result.get("ok")),
                 "sent": bool(result.get("sent")),
+                "status": result.get("status"),
             },
         )
     except Exception as exc:
@@ -884,6 +982,9 @@ def main() -> int:
                             "has_image": has_image,
                         },
                     )
+                    continue
+
+                if text and handle_report_types_command(api, message):
                     continue
 
                 if text and handle_report_command(
