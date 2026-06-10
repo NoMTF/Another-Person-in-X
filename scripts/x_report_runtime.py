@@ -352,6 +352,82 @@ def form_params_from_parser(parser: ReportFlowParser, option: str) -> dict[str, 
     }
 
 
+REPORT_SUCCESS_RE = re.compile(
+    r"感谢你让我们知道|感谢你告诉我们|举报已提交|已收到你的举报|"
+    r"thanks for letting us know|thanks for reporting|we received your report|"
+    r"your report has been submitted|report_story_complete|report_complete",
+    re.I,
+)
+
+REPORT_ERROR_RE = re.compile(
+    r"出了点问题|请稍后再试|无法处理|无法提交|"
+    r"something went wrong|try again later|unable to submit|could not submit|"
+    r"temporarily unavailable",
+    re.I,
+)
+
+STRONG_CHALLENGE_MARKERS = (
+    "captcha",
+    "g-recaptcha",
+    "hcaptcha",
+    "funcaptcha",
+    "arkose",
+    "cf-chl",
+    "cf-turnstile",
+    "cloudflare ray id",
+    "security challenge",
+    "browser challenge",
+    "verify you are human",
+    "prove you are human",
+    "are you a robot",
+    "unusual login activity",
+    "confirm your identity",
+    "please verify your identity",
+    "login challenge",
+    "验证码",
+    "真人验证",
+    "验证你是真人",
+    "人机验证",
+    "安全检查",
+    "确认你的身份",
+    "异常登录",
+    "账号已锁定",
+    "账号已被锁定",
+)
+
+
+def report_success_text(text: str, html_text: str = "") -> bool:
+    return bool(REPORT_SUCCESS_RE.search(f"{text}\n{html_text}"))
+
+
+def report_error_text(text: str, html_text: str = "") -> bool:
+    return bool(REPORT_ERROR_RE.search(f"{text}\n{html_text}"))
+
+
+def challenge_detected(text: str, title: str = "", html_text: str = "") -> str:
+    haystack = f"{title}\n{text}\n{html_text}".lower()
+    for marker in STRONG_CHALLENGE_MARKERS:
+        if marker.lower() in haystack:
+            return marker
+    return ""
+
+
+def report_page_summary(parser: ReportFlowParser, html_text: str) -> dict[str, Any]:
+    button_texts = [
+        str(button.get("text") or "").strip()
+        for button in parser.buttons
+        if str(button.get("text") or "").strip()
+    ]
+    return {
+        "title": title_from_html(html_text),
+        "summary": parser.clean_text[:500],
+        "required_inputs": required_inputs(parser),
+        "options": sorted(selected_options(parser))[:20],
+        "buttons": button_texts[:12],
+        "forms": len(parser.forms),
+    }
+
+
 class ReportQueue:
     def __init__(
         self,
@@ -609,8 +685,20 @@ class ReportQueue:
                 params["is_media"] = "true"
 
         html_text = self.http_get("https://x.com/i/safety/report_story?" + urllib.parse.urlencode(params))
+        html_raw = str(html_text)
         parser = parse_report_html(str(html_text))
-        step_summaries = [{"title": title_from_html(str(html_text)), "options": sorted(selected_options(parser))[:20]}]
+        step_summaries = [report_page_summary(parser, html_raw)]
+        challenge = challenge_detected(parser.clean_text, title_from_html(html_raw), html_raw)
+        if challenge:
+            return {
+                "ok": False,
+                "sent": False,
+                "status": "needs_manual",
+                "error": "challenge page detected",
+                "challenge_kind": challenge,
+                "method": "x_report_story_http",
+                "steps": step_summaries,
+            }
         for option in action["path"]:
             available = selected_options(parser)
             if available and option not in available:
@@ -623,24 +711,53 @@ class ReportQueue:
                 }
             next_params = form_params_from_parser(parser, option)
             html_text = self.http_get("https://x.com/i/safety/report_story?" + urllib.parse.urlencode(next_params))
-            parser = parse_report_html(str(html_text))
+            html_raw = str(html_text)
+            parser = parse_report_html(html_raw)
             missing = required_inputs(parser)
-            text = parser.clean_text.lower()
-            step_summaries.append(
-                {
-                    "selected": option,
-                    "title": title_from_html(str(html_text)),
-                    "required_inputs": missing,
-                    "options": sorted(selected_options(parser))[:20],
+            title = title_from_html(html_raw)
+            page = report_page_summary(parser, html_raw)
+            page["selected"] = option
+            step_summaries.append(page)
+            if report_success_text(parser.clean_text, html_raw):
+                return {
+                    "ok": True,
+                    "sent": True,
+                    "status": "succeeded",
+                    "method": "x_report_story_http",
+                    "action_kind": action["action_kind"],
+                    "path": action["path"],
+                    "summary": parser.clean_text[:300],
+                    "steps": step_summaries,
                 }
-            )
+            if report_error_text(parser.clean_text, html_raw):
+                return {
+                    "ok": False,
+                    "sent": False,
+                    "status": "failed",
+                    "error": "report flow returned an error page",
+                    "method": "x_report_story_http",
+                    "steps": step_summaries,
+                }
             if missing:
                 return {"ok": False, "sent": False, "status": "needs_details", "required_inputs": missing, "steps": step_summaries}
-            if "captcha" in text or "challenge" in text or "cloudflare" in text:
-                return {"ok": False, "sent": False, "status": "needs_manual", "error": "challenge page detected", "steps": step_summaries}
+            challenge = challenge_detected(parser.clean_text, title, html_raw)
+            if challenge:
+                return {
+                    "ok": False,
+                    "sent": False,
+                    "status": "needs_manual",
+                    "error": "challenge page detected",
+                    "challenge_kind": challenge,
+                    "method": "x_report_story_http",
+                    "steps": step_summaries,
+                }
 
         final_text = parser.clean_text
-        success = bool(re.search(r"感谢你让我们知道|thanks for letting us know|report_story_complete", final_text, re.I))
+        final_options = selected_options(parser)
+        success = report_success_text(final_text, html_raw)
+        inferred_terminal_submit = bool(action["path"]) and not missing and not final_options and not report_error_text(final_text, html_raw)
+        if inferred_terminal_submit:
+            success = True
         return {
             "ok": success,
             "sent": success,
@@ -649,5 +766,6 @@ class ReportQueue:
             "action_kind": action["action_kind"],
             "path": action["path"],
             "summary": final_text[:300],
+            "terminal_submit_inferred": inferred_terminal_submit,
             "steps": step_summaries,
         }

@@ -31,6 +31,10 @@ DEFAULT_EMPTY_REPLY = "我刚刚卡了一下，再发一次嘛 qwq"
 X_TOOLS_API = os.environ.get("X_TOOLS_API", "").strip().rstrip("/")
 REPORT_TYPES_COMMAND_RE = re.compile(r"^/(?:report_types|reporttypes|report_type|举报类型|举报类型表)(?:@\w+)?\s*$", re.I)
 ALL_COMMAND_RE = re.compile(r"^/all(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
+FOLLOW_ALL_RE = re.compile(
+    r"^\s*(?:关注|follow)\s*@?(?P<screen_name>[A-Za-z0-9_]{1,20})\s*$",
+    re.I,
+)
 REPORT_COMMAND_RE = re.compile(r"^/(?:report|举报)(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
 BROADCAST_REPORT_RE = re.compile(r"(^|\s)/(?:report|举报)\b|举报|report\s+(?:@|https?://|\d)", re.I)
 BROADCAST_SECRET_RE = re.compile(
@@ -450,6 +454,11 @@ def parse_all_command(text: str) -> tuple[bool, str, str]:
     return True, body, ""
 
 
+def parse_follow_all_body(body: str) -> str:
+    match = FOLLOW_ALL_RE.match(str(body or "").strip())
+    return match.group("screen_name") if match else ""
+
+
 def parse_report_command(text: str) -> tuple[bool, Dict[str, Any], str]:
     match = REPORT_COMMAND_RE.match(str(text or "").strip())
     if not match:
@@ -858,6 +867,50 @@ def handle_all_command(
             "text_len": len(body),
         },
     )
+    follow_screen_name = parse_follow_all_body(body)
+    if follow_screen_name:
+        api.send_message(chat_id, f"收到，给 {len(targets)} 个账号关注 @{follow_screen_name}。", message_id)
+        ok_count = 0
+        rows: List[str] = []
+        for target in targets:
+            target_profile = target["profile"]
+            target_label = target.get("bot_username") or target_profile
+            try:
+                result = post_json(x_api_for_profile(target_profile) + "/follow", {"screen_name": follow_screen_name})
+                followed_user = result.get("user") if isinstance(result.get("user"), dict) else {}
+                followed_handle = followed_user.get("screen_name") or follow_screen_name
+                ok = bool(result.get("followed") or result.get("ok") or followed_user)
+                if ok:
+                    ok_count += 1
+                    rows.append(f"{target_label}：已关注 @{followed_handle}")
+                else:
+                    rows.append(f"{target_label}：关注返回异常 {one_line(result, 160)}")
+                append_event(
+                    event_path,
+                    {
+                        "event": "ALL_TARGET_FOLLOW",
+                        "target": target_label,
+                        "profile": target_profile,
+                        "screen_name": follow_screen_name,
+                        "ok": ok,
+                    },
+                )
+            except Exception as exc:
+                rows.append(f"{target_label}：关注失败 {one_line(exc, 160)}")
+                append_event(
+                    event_path,
+                    {
+                        "event": "ALL_TARGET_FOLLOW_ERROR",
+                        "target": target_label,
+                        "profile": target_profile,
+                        "screen_name": follow_screen_name,
+                        "error": str(exc)[:400],
+                    },
+                )
+        rows.append(f"完成：{ok_count}/{len(targets)}")
+        api.send_message(chat_id, "\n".join(rows)[:MAX_TELEGRAM_TEXT])
+        return True
+
     api.send_message(chat_id, f"收到，转给 {len(targets)} 个机器人。", message_id)
     for target in targets:
         target_profile = target["profile"]
