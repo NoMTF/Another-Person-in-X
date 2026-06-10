@@ -100,6 +100,7 @@ Expected:
 python scripts/x_adapter.py post --text "hello" --dry-run
 python scripts/x_adapter.py repost --tweet-id 123 --dry-run
 python scripts/x_adapter.py quote --tweet-id 123 --screen-name example --text "short quote" --dry-run
+python scripts/x_adapter.py report --user example --reason spam --dry-run
 python scripts/default_persona.py --output ./out --seed 1
 ```
 
@@ -108,6 +109,7 @@ Expected:
 - Returns JSON.
 - Does not require cookies in dry-run.
 - Does not send a real X action.
+- Report dry-run returns JSON and does not imply a live report. Live reports require explicit server-side enablement, `confirm=REPORT`, one target, and audit evidence.
 
 ## Browse Automation Regression
 

@@ -47,6 +47,9 @@ class BaseAdapter:
     def follow(self, user_id_or_handle: str) -> ActionResult:
         return self._unsupported("follow")
 
+    def report(self, user_id_or_handle: str, reason: str = "spam", tweet_id: str = "", confirm: str = "") -> ActionResult:
+        return self._unsupported("report")
+
     def _unsupported(self, action: str) -> ActionResult:
         return ActionResult(False, action, self.name, self.dry_run, error="unsupported action", metadata={})
 
@@ -222,6 +225,25 @@ class TwikitAdapter(BaseAdapter):
 
         return self._run("follow", {"user": user_id_or_handle}, _follow)
 
+    def report(self, user_id_or_handle: str, reason: str = "spam", tweet_id: str = "", confirm: str = "") -> ActionResult:
+        payload = {
+            "user": user_id_or_handle,
+            "reason": reason,
+            "tweet_id": tweet_id,
+            "confirm": bool(confirm),
+        }
+        dry = self._dry_result("report", payload)
+        if dry:
+            return dry
+        return ActionResult(
+            False,
+            "report",
+            self.name,
+            False,
+            error="twikit has no stable public report method; use the local X service /report endpoint with explicit live enablement",
+            metadata=payload,
+        )
+
 
 class OfficialApiAdapter(BaseAdapter):
     name = "official-api"
@@ -249,6 +271,9 @@ class OfficialApiAdapter(BaseAdapter):
     def follow(self, user_id_or_handle: str) -> ActionResult:
         return self._result("follow", {"user": user_id_or_handle})
 
+    def report(self, user_id_or_handle: str, reason: str = "spam", tweet_id: str = "", confirm: str = "") -> ActionResult:
+        return self._result("report", {"user": user_id_or_handle, "reason": reason, "tweet_id": tweet_id, "confirm": bool(confirm)})
+
 
 def adapter_for(name: str, dry_run: bool) -> BaseAdapter:
     if name == "twikit":
@@ -260,7 +285,7 @@ def adapter_for(name: str, dry_run: bool) -> BaseAdapter:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="X/Twitter adapter boundary for OpenClaw Agent Factory.")
-    parser.add_argument("action", choices=["post", "reply", "like", "repost", "quote", "follow"])
+    parser.add_argument("action", choices=["post", "reply", "like", "repost", "quote", "follow", "report"])
     parser.add_argument("--adapter", default="twikit", choices=["twikit", "official-api"])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--text", default="")
@@ -268,6 +293,8 @@ def main() -> int:
     parser.add_argument("--screen-name", default="")
     parser.add_argument("--url", default="")
     parser.add_argument("--user", default="")
+    parser.add_argument("--reason", default="spam")
+    parser.add_argument("--confirm", default="")
     args = parser.parse_args()
 
     adapter = adapter_for(args.adapter, args.dry_run)
@@ -281,8 +308,10 @@ def main() -> int:
         result = adapter.repost(args.tweet_id)
     elif args.action == "quote":
         result = adapter.quote(args.tweet_id, args.text, screen_name=args.screen_name, url=args.url)
-    else:
+    elif args.action == "follow":
         result = adapter.follow(args.user)
+    else:
+        result = adapter.report(args.user or args.screen_name, reason=args.reason, tweet_id=args.tweet_id, confirm=args.confirm)
     print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
     return 0 if result.ok or result.dry_run else 2
 

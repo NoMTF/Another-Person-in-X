@@ -17,6 +17,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Replies to people under the bot's own posts.
 - Low-volume replies to highly relevant timeline posts.
 - Likes, reposts, quotes, follows.
+- Owner-triggered single-target report validation. Reporting is never autonomous, never batched, and never allowed through `/all`.
 
 ## Hard Limits
 
@@ -73,6 +74,7 @@ Use this reference before enabling X/Twitter posting, replying, likes, reposts, 
 - Ads, promotions, giveaways, group invites, loans, gambling, adult spam, crypto/forex pitches, "follow and repost" farming, coupons, and obvious engagement farming should be skipped without reply, quote, repost, like, or follow.
 - The persona should not agree with, praise, thank, or flatter users by default. It can ignore, decline, lightly push back, or answer dryly when that fits the source corpus.
 - Low-risk challenge or teasing is not automatically banned; it may receive a low-probability persona-fit reply. Harassment, brigading, dogpiles, and attacks on protected traits remain skipped.
+- Report/abuse actions are not part of proactive browsing. A report endpoint, if present, must be owner-only, single-target, dry-run by default, explicit-confirm for live mode, and audit logged without credentials.
 - Browse-time reply/quote text and original posts should use the persona's `data/style_spectrum.json` as the primary variation source. Pass a sampled `style_sample` with length bucket, line shape, intent, stance, texture, punctuation, topic, opening, ending, and safe example anchors. Hand-written modes such as "long", "cold", or "sharp" are fallback only when no spectrum exists.
 - If X returns a daily send limit for `/tweet`, `/reply`, or `/quote`, write a shared `send_pause.json` and keep pending posts intact. During this pause, proactive browsing may still like, bare-repost, or follow within limits, but should skip or downgrade new reply/quote attempts.
 - Ordinary "not relevant / did not understand / too little context" skips should use a shorter cooldown than dangerous, spam, prompt-injection, or error skips so fresh context can be reconsidered sooner. Around 20-40 minutes is a better default for soft skips than multi-hour locks.

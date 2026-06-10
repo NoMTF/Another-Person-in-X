@@ -28,6 +28,12 @@ VISION_TIMEOUT = int(os.environ.get("TELEGRAM_VISION_TIMEOUT_SECONDS", "120"))
 FACT_SEARCH_ENABLED = os.environ.get("FACT_SEARCH_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 FACT_SEARCH_TIMEOUT_SECONDS = int(os.environ.get("FACT_SEARCH_TIMEOUT_SECONDS", "8"))
 DEFAULT_EMPTY_REPLY = "我刚刚卡了一下，再发一次嘛 qwq"
+ALL_COMMAND_RE = re.compile(r"^/all(?:@\w+)?(?:\s+([\s\S]+))?$", re.I)
+BROADCAST_REPORT_RE = re.compile(r"(^|\s)/(?:report|举报)\b|举报|report\s+(?:@|https?://|\d)", re.I)
+BROADCAST_SECRET_RE = re.compile(
+    r"(auth[_-]?token|ct0|api[_-]?key|secret|bearer\s+|sk-[A-Za-z0-9]|password|密码|密钥|token\s*[:=])",
+    re.I,
+)
 
 PERSONA_FEEDBACK_RE = re.compile(
     r"(像\s*ai|ai\s*味|AI味|不像|不像本人|不够像|人设崩|人设跑偏|跑偏|露馅|露出破绽|"
@@ -410,6 +416,174 @@ def should_handle(message: Dict[str, Any], owner_chat_id: str, group_mode: str) 
     return False, f"unsupported-chat:{chat_type or 'unknown'}"
 
 
+def parse_all_command(text: str) -> tuple[bool, str, str]:
+    match = ALL_COMMAND_RE.match(str(text or "").strip())
+    if not match:
+        return False, "", ""
+    body = (match.group(1) or "").strip()
+    if not body:
+        return True, "", "用法：/all 让所有机器人执行的指令"
+    if len(body) > 1200:
+        return True, "", "/all 指令太长了，先压到 1200 字以内。"
+    if ALL_COMMAND_RE.match(body):
+        return True, "", "不接受嵌套 /all。"
+    if BROADCAST_REPORT_RE.search(body):
+        return True, "", "/all 不允许广播举报。举报只能单目标、单账号、单独确认。"
+    if BROADCAST_SECRET_RE.search(body):
+        return True, "", "/all 不广播疑似凭据或密钥内容。"
+    return True, body, ""
+
+
+def load_env_value(path: Path, key: str) -> str:
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except Exception:
+        return ""
+    prefix = key + "="
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#") or not line.startswith(prefix):
+            continue
+        value = line[len(prefix) :].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value
+    return ""
+
+
+def load_all_targets(current_state_dir: Path, current_profile: str, current_bot_username: str) -> List[Dict[str, str]]:
+    raw = os.environ.get("TELEGRAM_ALL_TARGETS", "").strip()
+    targets_file = os.environ.get("TELEGRAM_ALL_TARGETS_FILE", "").strip()
+    if targets_file:
+        try:
+            raw = Path(targets_file).read_text(encoding="utf-8")
+        except Exception:
+            raw = ""
+    targets: List[Dict[str, str]] = []
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = []
+        if isinstance(parsed, list):
+            for item in parsed:
+                if not isinstance(item, dict):
+                    continue
+                state_dir = str(item.get("state_dir") or "").strip()
+                profile = str(item.get("profile") or "").strip()
+                if not state_dir or not profile:
+                    continue
+                targets.append(
+                    {
+                        "state_dir": state_dir,
+                        "profile": profile,
+                        "bot_username": str(item.get("bot_username") or profile).strip(),
+                        "env_file": str(item.get("env_file") or "").strip(),
+                    }
+                )
+    if not targets:
+        targets = [
+            {
+                "state_dir": str(current_state_dir),
+                "profile": current_profile,
+                "bot_username": current_bot_username or current_profile,
+                "env_file": str(current_state_dir / ".env"),
+            }
+        ]
+    unique: List[Dict[str, str]] = []
+    seen: set[str] = set()
+    for target in targets:
+        key = target["profile"] + "\n" + target["state_dir"]
+        if key in seen:
+            continue
+        unique.append(target)
+        seen.add(key)
+    return unique
+
+
+def target_bot_token(target: Dict[str, str], current_state_dir: Path) -> str:
+    env_file = target.get("env_file") or str(Path(target["state_dir"]) / ".env")
+    token = load_env_value(Path(env_file), "TELEGRAM_BOT_TOKEN")
+    if not token and Path(target["state_dir"]) == current_state_dir:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    return token
+
+
+def handle_all_command(
+    api: TelegramAPI,
+    event_path: Path,
+    message: Dict[str, Any],
+    state_dir: Path,
+    profile: str,
+    bot_username: str,
+    owner_chat_id: str,
+    agent_timeout: int,
+) -> bool:
+    text = extract_text(message)
+    is_all, body, error = parse_all_command(text)
+    if not is_all:
+        return False
+    chat_id = str((message.get("chat") or {}).get("id", ""))
+    message_id = message.get("message_id")
+    if owner_chat_id and chat_id != owner_chat_id:
+        append_event(event_path, {"event": "ALL_REJECTED", "reason": "not-owner", "chat_id": chat_id})
+        return True
+    if error:
+        api.send_message(chat_id, error, message_id)
+        append_event(event_path, {"event": "ALL_REJECTED", "reason": error[:120], "chat_id": chat_id})
+        return True
+
+    targets = load_all_targets(state_dir, profile, bot_username)
+    append_event(
+        event_path,
+        {
+            "event": "ALL_INBOUND",
+            "chat_id": chat_id,
+            "target_count": len(targets),
+            "text_len": len(body),
+        },
+    )
+    api.send_message(chat_id, f"收到，转给 {len(targets)} 个机器人。", message_id)
+    for target in targets:
+        target_profile = target["profile"]
+        target_state_dir = Path(target["state_dir"])
+        target_label = target.get("bot_username") or target_profile
+        try:
+            token = target_bot_token(target, state_dir)
+            if not token:
+                raise RuntimeError("missing target TELEGRAM_BOT_TOKEN")
+            target_api = TelegramAPI(token, timeout=70)
+            reply, meta = run_agent(target_state_dir, target_profile, chat_id, body, agent_timeout)
+            parts = split_reply(reply)
+            if not reply:
+                parts = [DEFAULT_EMPTY_REPLY]
+            for index, part in enumerate(parts):
+                target_api.send_message(chat_id, part)
+                time.sleep(0.8 if index == 0 else 0.5)
+            append_event(
+                event_path,
+                {
+                    "event": "ALL_TARGET_OUTBOUND",
+                    "target": target_label,
+                    "profile": target_profile,
+                    "parts": len(parts),
+                    "meta": meta,
+                },
+            )
+        except Exception as exc:
+            api.send_message(chat_id, f"{target_label} 没发出去：{one_line(exc, 180)}")
+            append_event(
+                event_path,
+                {
+                    "event": "ALL_TARGET_ERROR",
+                    "target": target_label,
+                    "profile": target_profile,
+                    "error": str(exc)[:400],
+                },
+            )
+    return True
+
+
 def sanitize_visible_reply(text: str) -> str:
     text = str(text or "")
     text = text.replace("／", "、").replace("/", "、")
@@ -595,6 +769,18 @@ def main() -> int:
                             "has_image": has_image,
                         },
                     )
+                    continue
+
+                if text and handle_all_command(
+                    api,
+                    event_path,
+                    message,
+                    state_dir,
+                    args.profile,
+                    args.bot_username,
+                    args.owner_chat_id,
+                    args.agent_timeout,
+                ):
                     continue
 
                 image_summary = ""
