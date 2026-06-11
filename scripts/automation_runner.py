@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-BROWSE_REFERENCE_PER_200 = {"like": 15, "repost": 35, "reply": 36, "quote": 14, "follow": 1}
+BROWSE_REFERENCE_PER_200 = {"like": 15, "repost": 24, "reply": 42, "quote": 18, "follow": 1}
 REPLY_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["reply"] / BROWSE_REFERENCE_PER_200["like"]
 REPOST_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["repost"] / BROWSE_REFERENCE_PER_200["like"]
 QUOTE_TO_LIKE_RATIO = BROWSE_REFERENCE_PER_200["quote"] / BROWSE_REFERENCE_PER_200["like"]
@@ -510,19 +510,19 @@ def main() -> int:
         "--max-browse-replies",
         type=int,
         default=None,
-        help="Defaults from the browse reference mix: about 36 replies per 15 likes.",
+        help="Defaults from the browse reference mix: about 42 replies per 15 likes.",
     )
     parser.add_argument(
         "--max-browse-reposts",
         type=int,
         default=None,
-        help="Defaults from the browse reference mix: about 35 reposts per 15 likes.",
+        help="Defaults from the browse reference mix: about 24 reposts per 15 likes.",
     )
     parser.add_argument(
         "--max-browse-quotes",
         type=int,
         default=None,
-        help="Defaults from the browse reference mix: about 10 quotes per 15 likes.",
+        help="Defaults from the browse reference mix: about 18 quotes per 15 likes.",
     )
     parser.add_argument("--max-browse-follows", type=int, default=1)
     parser.add_argument("--style-spectrum", default="", help="Optional persona data/style_spectrum.json path.")

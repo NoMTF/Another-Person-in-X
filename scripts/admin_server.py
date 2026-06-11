@@ -33,13 +33,13 @@ DEFAULT_FEATURES = {
 }
 
 DEFAULT_LIMITS = {
-    "daily_posts": 5,
+    "daily_posts": 16,
     "reply_delay_min_seconds": 45,
     "reply_delay_max_seconds": 600,
-    "browse_interval_min_minutes": 20,
+    "browse_interval_min_minutes": 12,
     "likes_per_day": 15,
-    "reposts_per_day": 35,
-    "quotes_per_day": 10,
+    "reposts_per_day": 28,
+    "quotes_per_day": 14,
     "follows_per_day": 4,
     "max_replies_per_hour": 12,
 }

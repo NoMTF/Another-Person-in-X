@@ -126,7 +126,7 @@ Expected:
 
 - The result contains `reply`, `like`, `repost`, and `quote` candidates for the high-signal followed-timeline browse item.
 - Each browse candidate metadata includes `action_desires` with independent `reply`, `like`, `repost`, and `quote` scores.
-- With multiple high-signal followed-timeline items, bare repost candidates should be available without quote gating, and the default bare repost count should be higher than the quote count.
+- With multiple high-signal followed-timeline items, bare repost candidates should be available without quote gating, but reply/quote output should have a real chance and should not be silently converted into reposts when X send limits are active.
 - The unfollowed-author fixture contains a `follow` candidate when the author is high-relevance and not already followed.
 - Each candidate calls `/api/rate/check`.
 - Each candidate writes an audit row.
